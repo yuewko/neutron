@@ -486,6 +486,12 @@ class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
                         self.mechanism_manager.delete_network_precommit(
                             mech_context)
 
+                        # Deletes network from backend only.
+                        # Doesn't delete database record.
+                        self.ddi.delete_network(
+                            context, id,
+                            allowed_net_number_for_netview_delete=1)
+
                         record = self._get_network(context, id)
                         LOG.debug(_("Deleting network record %s"), record)
                         session.delete(record)
@@ -594,12 +600,15 @@ class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
                 if not allocated:
                     mech_context = driver_context.SubnetContext(self, context,
                                                                 subnet)
+                    already_deleted = (super(Ml2Plugin, self)
+                                       .delete_subnet(context, id))
                     self.mechanism_manager.delete_subnet_precommit(
                         mech_context)
 
-                    LOG.debug(_("Deleting subnet record"))
-                    record = self._get_subnet(context, id)
-                    session.delete(record)
+                    if not already_deleted:
+                        LOG.debug(_("Deleting subnet record"))
+                        record = self._get_subnet(context, id)
+                        session.delete(record)
 
                     LOG.debug(_("Committing transaction"))
                     break

@@ -49,16 +49,18 @@ OPTS = [
     cfg.StrOpt('dnsmasq_config_file',
                default='',
                help=_('Override the default dnsmasq settings with this file')),
+    cfg.BoolOpt('dhcp_delete_namespaces', default=False,
+                help=_("Delete namespace after removing a dhcp server.")),
     cfg.ListOpt('dnsmasq_dns_servers',
                 help=_('Comma-separated list of the DNS servers which will be '
                        'used as forwarders.'),
                 deprecated_name='dnsmasq_dns_server'),
-    cfg.BoolOpt('dhcp_delete_namespaces', default=False,
-                help=_("Delete namespace after removing a dhcp server.")),
     cfg.IntOpt(
         'dnsmasq_lease_max',
         default=(2 ** 24),
         help=_('Limit number of leases to prevent a denial-of-service.')),
+    cfg.StrOpt('interface_driver',
+               help=_("The driver used to manage the virtual interface.")),
 ]
 
 IPV4 = 4
@@ -870,3 +872,28 @@ class DeviceManager(object):
 
         self.plugin.release_dhcp_port(network.id,
                                       self.get_device_id(network))
+
+    def setup_relay(self, network, iface_name, mac_address, relay_bridge):
+        if ip_lib.device_exists(iface_name,
+                                self.root_helper,
+                                network.namespace):
+            LOG.debug(_('Reusing existing device: %s.'), iface_name)
+        else:
+            self.driver.plug(network.id,
+                             network.id,
+                             iface_name,
+                             mac_address,
+                             namespace=network.namespace,
+                             bridge=relay_bridge)
+            dhcp_client_cmd = [self.conf.dhclient_path, iface_name]
+
+            if network.namespace:
+                ip_wrapper = ip_lib.IPWrapper(self.root_helper,
+                                              network.namespace)
+                ip_wrapper.netns.execute(dhcp_client_cmd)
+            else:
+                utils.execute(dhcp_client_cmd, self.root_helper)
+
+    def destroy_relay(self, network, device_name, relay_bridge):
+        self.driver.unplug(device_name, namespace=network.namespace,
+                           bridge=relay_bridge)

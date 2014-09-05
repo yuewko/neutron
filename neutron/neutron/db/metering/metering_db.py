@@ -21,7 +21,7 @@ from sqlalchemy import orm
 from neutron.api.rpc.agentnotifiers import metering_rpc_agent_api
 from neutron.common import constants
 from neutron.db import api as dbapi
-from neutron.db import db_base_plugin_v2 as base_db
+from neutron.db import common_db_mixin
 from neutron.db import l3_db
 from neutron.db import model_base
 from neutron.db import models_v2
@@ -57,7 +57,7 @@ class MeteringLabel(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
 
 
 class MeteringDbMixin(metering.MeteringPluginBase,
-                      base_db.CommonDbMixin):
+                      common_db_mixin.CommonDbMixin):
 
     def __init__(self):
         dbapi.register_models()

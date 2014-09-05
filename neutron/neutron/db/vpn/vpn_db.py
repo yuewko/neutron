@@ -24,7 +24,7 @@ from sqlalchemy.orm import exc
 
 from neutron.common import constants as n_constants
 from neutron.db import api as qdbapi
-from neutron.db import db_base_plugin_v2 as base_db
+from neutron.db import common_db_mixin
 from neutron.db import l3_agentschedulers_db as l3_agent_db
 from neutron.db import l3_db
 from neutron.db import model_base
@@ -163,7 +163,7 @@ class VPNService(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
         cascade="all, delete-orphan")
 
 
-class VPNPluginDb(VPNPluginBase, base_db.CommonDbMixin):
+class VPNPluginDb(VPNPluginBase, common_db_mixin.CommonDbMixin):
     """VPN plugin database class using SQLAlchemy models."""
 
     def __init__(self):

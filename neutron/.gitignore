@@ -25,3 +25,6 @@ subunit.log
 .venv/
 *.mo
 *.sw?
+*.swp
+*.swo
+*~

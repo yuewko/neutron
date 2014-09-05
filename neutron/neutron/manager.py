@@ -123,6 +123,10 @@ class NeutronManager(object):
         # the rest of service plugins
         self.service_plugins = {constants.CORE: self.plugin}
         self._load_service_plugins()
+        # Load DDI driver
+        ddi_driver_class_name = cfg.CONF.ddi_driver
+        ddi_driver_class = importutils.import_class(ddi_driver_class_name)
+        self.ddi = ddi_driver_class()
 
     def _get_plugin_instance(self, namespace, plugin_provider):
         try:
@@ -213,3 +217,7 @@ class NeutronManager(object):
     @classmethod
     def get_service_plugins(cls):
         return cls.get_instance().service_plugins
+
+    @classmethod
+    def get_ddi(cls):
+        return cls.get_instance().ddi

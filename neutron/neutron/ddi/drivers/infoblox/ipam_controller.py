@@ -17,6 +17,7 @@ from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
 from neutron.db.infoblox import infoblox_db
+from neutron.db import models_v2
 from neutron.ddi.drivers.infoblox import config
 from neutron.ddi.drivers.infoblox import dns_controller
 from neutron.ddi.drivers.infoblox import ea_manager
@@ -55,7 +56,7 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         subnet = super(InfobloxIPAMController, self).create_subnet(context, s)
 
         cfg = self.config_finder.find_config_for_subnet(context, subnet)
-        dhcp_member = cfg.reserve_dhcp_member()
+        dhcp_members = cfg.reserve_dhcp_members()
         dns_members = cfg.reserve_dns_members()
 
         create_subnet_flow = linear_flow.Flow('ib_create_subnet')
@@ -68,7 +69,10 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         # the beginning of the list.
         # If this net is not flat, Member IP will later be replaced by
         # DNS relay IP.
-        nameservers = [dhcp_member.ip] + user_nameservers
+        if isinstance(dhcp_members, list):
+            nameservers = [item.ip for item in dhcp_members] + user_nameservers
+        else:
+            nameservers = [dhcp_members.ip] + user_nameservers
 
         network = self._get_network(context, subnet['network_id'])
         network_extattrs = self.ea_manager.get_extattrs_for_network(
@@ -77,15 +81,31 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
                             'net_view_name': cfg.network_view,
                             'dns_view_name': cfg.dns_view,
                             'cidr': subnet['cidr'],
-                            'dhcp_member': dhcp_member,
+                            'dhcp_member': dhcp_members,
                             'gateway_ip': subnet['gateway_ip'],
                             'disable': True,
                             'nameservers': nameservers,
                             'network_extattrs': network_extattrs}
 
         if not cfg.is_external and cfg.require_dhcp_relay:
-            network.update(dict(dns_relay_ip=dns_members[0].ip,
-                                dhcp_relay_ip=dhcp_member.ip))
+            dns_members_list = [member.ip for member in dns_members]
+            dhcp_members_list = [member.ip for member in dhcp_members]
+            network.update(dict(dns_relay_ips=dns_members_list,
+                                dhcp_relay_ips=dhcp_members_list))
+
+            for member in dhcp_members:
+                dhcp_member = models_v2.InfobloxDHCPMember(
+                    server_ip=member.ip,
+                    network_id=network.id
+                )
+                context.session.add(dhcp_member)
+
+            for member in dns_members:
+                dns_member = models_v2.InfobloxDNSMember(
+                    server_ip=member.ip,
+                    network_id=network.id
+                )
+                context.session.add(dns_member)
 
         if cfg.requires_net_view():
             create_subnet_flow.add(tasks.CreateNetViewTask())
@@ -157,6 +177,15 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
             context, subnet)
 
         cfg = self.config_finder.find_config_for_subnet(context, subnet)
+        network = self._get_network(context, subnet['network_id'])
+
+        if not cfg.is_external and cfg.require_dhcp_relay:
+            member = context.session.query(models_v2.InfobloxDNSMember)
+            member.filter_by(network_id=network.id).delete()
+
+            member = context.session.query(models_v2.InfobloxDHCPMember)
+            member.filter_by(network_id=network.id).delete()
+
         self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
 
         if infoblox_db.is_last_subnet(context, subnet['id']):

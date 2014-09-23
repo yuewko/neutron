@@ -18,9 +18,10 @@
 import mock
 from mock import patch
 import requests
+from requests import exceptions as req_exc
 
 from neutron.ddi.drivers.infoblox import connector
-from neutron.ddi.drivers.infoblox.exceptions import InfobloxIsMisconfigured
+from neutron.ddi.drivers.infoblox import exceptions
 from neutron.tests import base
 
 
@@ -55,7 +56,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         fake_conf.infoblox_password = 'password'
 
         with mock.patch.object(connector.cfg, 'CONF', fake_conf):
-            self.assertRaises(InfobloxIsMisconfigured, connector.Infoblox)
+            self.assertRaises(exceptions.InfobloxIsMisconfigured,
+                              connector.Infoblox)
 
     def test_throws_error_on_password_not_set(self):
         fake_conf = mock.Mock()
@@ -64,7 +66,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         fake_conf.infoblox_password = None
 
         with mock.patch.object(connector.cfg, 'CONF', fake_conf):
-            self.assertRaises(InfobloxIsMisconfigured, connector.Infoblox)
+            self.assertRaises(exceptions.InfobloxIsMisconfigured,
+                              connector.Infoblox)
 
     def test_throws_error_on_wapi_url_not_set(self):
         fake_conf = mock.Mock()
@@ -73,7 +76,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         fake_conf.infoblox_password = 'pass'
 
         with mock.patch.object(connector.cfg, 'CONF', fake_conf):
-            self.assertRaises(InfobloxIsMisconfigured, connector.Infoblox)
+            self.assertRaises(exceptions.InfobloxIsMisconfigured,
+                              connector.Infoblox)
 
     @mock.patch.object(connector.cfg, 'CONF', valid_config)
     def test_create_object(self):
@@ -174,3 +178,19 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/v1.1/network',
                 verify=False
             )
+
+    def test_neutron_exception_is_raised_on_any_request_connection_error(self):
+        supported_exceptions = [req_exc.Timeout,
+                                req_exc.HTTPError,
+                                req_exc.ConnectionError,
+                                req_exc.ProxyError,
+                                req_exc.SSLError,
+                                req_exc.TooManyRedirects,
+                                req_exc.InvalidURL]
+
+        for exc in supported_exceptions:
+            f = mock.Mock()
+            f.__name__ = 'mock'  # functools.wraps need a name of a function
+            f.side_effect = exc
+            self.assertRaises(exceptions.InfobloxConnectionError,
+                              connector.reraise_neutron_exception(f))

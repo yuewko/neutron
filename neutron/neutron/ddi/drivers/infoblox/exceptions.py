@@ -175,3 +175,7 @@ class InvalidMemberConfig(exceptions.NeutronException):
 
 class OperationNotAllowed(exceptions.NeutronException):
     message = _("Requested operation is not allowed: %(reason)s")
+
+
+class InfobloxConnectionError(exceptions.NeutronException):
+    message = _("Infoblox HTTP request failed with: %(reason)s")

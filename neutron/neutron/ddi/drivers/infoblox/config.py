@@ -186,9 +186,8 @@ class Config(object):
 
         self.require_dhcp_relay = config_dict.get('require_dhcp_relay', False)
 
-        self._dhcp_members = config_dict.get('dhcp_members',
-                                             self.NEXT_AVAILABLE_MEMBER)
         self._dns_members = config_dict.get('dns_members')
+        self._dhcp_members = config_dict.get('dhcp_members')
 
         self.domain_suffix_pattern = config_dict.get(
             'domain_suffix_pattern', 'global.com')
@@ -256,16 +255,21 @@ class Config(object):
         else:
             return [reserved_members]
 
-    def reserve_dhcp_member(self):
-        reserved_member = self._reserve_member(self._dhcp_members,
+    def reserve_dhcp_members(self):
+        reserved_members = self._reserve_member(self._dhcp_members,
                                                self.network_template,
                                                ib_db.DHCP_MEMBER_TYPE)
         # use DHCP member for DNS if DNS is not set
         if self._dns_members is None:
-            self._reserve_member(reserved_member.name,
+            self._dns_members = self._dhcp_members
+            self._reserve_member(self._dhcp_members,
                                  self.network_template,
                                  ib_db.DNS_MEMBER_TYPE)
-        return reserved_member
+
+        if isinstance(reserved_members, list):
+            return reserved_members
+        else:
+            return [reserved_members]
 
     def requires_net_view(self):
         return not self.is_external
@@ -299,15 +303,15 @@ class Config(object):
         raise RuntimeError(msg)
 
     def _reserve_member(self, members, template, member_type):
-        if isinstance(members, list) and member_type == ib_db.DNS_MEMBER_TYPE:
-            dns_members = [self.member_manager.get_member(member)
+        if isinstance(members, list):
+            members_to_reserve = [self.member_manager.get_member(member)
                            for member in members]
-            for member in dns_members:
+            for member in members_to_reserve:
                 self.member_manager.reserve_member(self.context,
                                                    self.network_view,
                                                    member.name,
                                                    member_type)
-            return dns_members
+            return members_to_reserve
 
         member = self.member_manager.find_member(self.context,
                                                  self.network_view,

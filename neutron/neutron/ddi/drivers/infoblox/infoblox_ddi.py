@@ -63,9 +63,3 @@ class InfobloxDDI(neutron_ddi.NeutronDDI):
         taskflow.engines.run(context.parent_flow, store=context.store)
 
         return retval
-
-    def get_additional_network_dict_params(self, network):
-        return {
-            'dhcp_relay_ip': network['dhcp_relay_ip'],
-            'dns_relay_ip': network['dns_relay_ip']
-        }

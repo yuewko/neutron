@@ -15,8 +15,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import functools
+
 from oslo.config import cfg
 import requests
+from requests import exceptions as req_exc
 import urllib
 import urlparse
 
@@ -38,6 +41,18 @@ cfg.CONF.register_opts(OPTS)
 
 
 LOG = logging.getLogger(__name__)
+
+
+def reraise_neutron_exception(func):
+    @functools.wraps(func)
+    def callee(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except req_exc.RequestException as e:
+            LOG.error(_("HTTP request failed: %s"), e)
+            raise exc.InfobloxConnectionError(reason=e)
+
+    return callee
 
 
 class Infoblox(object):
@@ -102,6 +117,7 @@ class Infoblox(object):
         if '/' in objtype:
             raise ValueError('WAPI object type can\'t contains slash.')
 
+    @reraise_neutron_exception
     def get_object(self, objtype, payload=None, return_fields=None,
                    extattrs=None):
         """
@@ -144,6 +160,7 @@ class Infoblox(object):
 
         return jsonutils.loads(r.content)
 
+    @reraise_neutron_exception
     def create_object(self, objtype, payload, return_fields=None):
         """
         Create an Infoblox object of type 'objtype'
@@ -183,6 +200,7 @@ class Infoblox(object):
 
         return jsonutils.loads(r.content)
 
+    @reraise_neutron_exception
     def call_func(self, func_name, ref, payload, return_fields=None):
         if not return_fields:
             return_fields = []
@@ -212,6 +230,7 @@ class Infoblox(object):
 
         return jsonutils.loads(r.content)
 
+    @reraise_neutron_exception
     def update_object(self, ref, payload):
         """
         Update an Infoblox object
@@ -238,6 +257,7 @@ class Infoblox(object):
 
         return jsonutils.loads(r.content)
 
+    @reraise_neutron_exception
     def delete_object(self, ref):
         """
         Remove an Infoblox object

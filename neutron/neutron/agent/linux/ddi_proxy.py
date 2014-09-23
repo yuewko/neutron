@@ -92,7 +92,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
                 opt_name='ddi_proxy_bridge',
                 opt_value=self.conf.ddi_proxy_bridge)
 
-        dhcp_relay_ip = self._get_relay_ip('dhcp_relay_ip')
+        dhcp_relay_ip = self._get_relay_ips('dhcp_relay_ip')
         if not dhcp_relay_ip:
             LOG.error(_('dhcp_relay_ip must be specified in config or in '
                         'network properties.'))
@@ -101,7 +101,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
                 opt_value=dhcp_relay_ip
             )
 
-        dns_relay_ip = self._get_relay_ip('dns_relay_ip')
+        dns_relay_ip = self._get_relay_ips('dns_relay_ip')
         if not dns_relay_ip:
             LOG.error(_('dns_relay_ip must be specified in config or in '
                         'network properties.'))
@@ -224,9 +224,9 @@ class DdiProxy(dhcp.DhcpLocalProcess):
 
     def _spawn_dhcp_proxy(self):
         """Spawns a dhcrelay process for the network."""
-        relay_ip = self._get_relay_ip('dhcp_relay_ip')
+        relay_ips = self._get_relay_ips('dhcp_relay_ip')
 
-        if not relay_ip:
+        if not relay_ips:
             LOG.error(_('DHCP relay server isn\'t defined for network %s'),
                       self.network.id)
             return
@@ -242,7 +242,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
             cmd.append('-l')
             cmd.append(self._get_relay_device_name())
 
-        cmd.append(relay_ip)
+        cmd.append(" ".join(relay_ips))
 
         if self.network.namespace:
             ip_wrapper = ip_lib.IPWrapper(self.root_helper,
@@ -255,12 +255,16 @@ class DdiProxy(dhcp.DhcpLocalProcess):
 
     def _spawn_dns_proxy(self):
         """Spawns a Dnsmasq process in DNS relay only mode for the network."""
-        relay_ip = self._get_relay_ip('dns_relay_ip')
+        relay_ips = self._get_relay_ips('dns_relay_ip')
 
-        if not relay_ip:
+        if not relay_ips:
             LOG.error(_('DNS relay server isn\'t defined for network %s'),
                       self.network.id)
             return
+
+        server_list = ""
+        for relay_ip in relay_ips:
+            server_list += " --server=%s" % relay_ip
 
         cmd = [
             'dnsmasq',
@@ -270,7 +274,8 @@ class DdiProxy(dhcp.DhcpLocalProcess):
             '--bind-interfaces',
             '--interface=%s' % self.interface_name,
             '--except-interface=lo',
-            '--server=%s' % relay_ip,
+            '--all-servers',
+            server_list,
             '--pid-file=%s' % self.get_conf_file_name(
                 'dns_pid', ensure_conf_dir=True),
         ]
@@ -300,22 +305,25 @@ class DdiProxy(dhcp.DhcpLocalProcess):
         return (self.RELAY_DEV_NAME_PREFIX +
                 self.network.id)[:self.dev_name_len]
 
-    def _get_relay_ip(self, ip_opt_name):
+    def _get_relay_ips(self, ip_opt_name):
         # Try to get relay IP from the config.
-        relay_ip = getattr(self.conf, ip_opt_name, None)
-        # If not specified in config try to get from network object.
-        if not relay_ip:
-            relay_ip = getattr(self.network, ip_opt_name, None)
+        ip_opt_name = '%ss' % ip_opt_name
 
-        if not relay_ip:
+        relay_ips = getattr(self.conf, ip_opt_name, None)
+        # If not specified in config try to get from network object.
+        if not relay_ips:
+            relay_ips = getattr(self.network, ip_opt_name, None)
+
+        if not relay_ips:
             return None
 
         try:
-            socket.inet_aton(relay_ip)
+            for relay_ip in relay_ips:
+                socket.inet_aton(relay_ip)
         except socket.error:
             LOG.error(_('An invalid option value has been provided:'
                         ' %(opt_name)s=%(opt_value)s') %
                       dict(opt_name=ip_opt_name, opt_value=relay_ip))
             return None
 
-        return relay_ip
+        return list(set(relay_ips))

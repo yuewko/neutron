@@ -565,6 +565,3 @@ class NeutronDDI(base.DDI):
         with context.session.begin(subtransactions=True):
             return super(NeutronDDI, self).delete_subnets_by_network(
                 context, network_id)
-
-    def get_additional_network_dict_params(self, network):
-        return {}

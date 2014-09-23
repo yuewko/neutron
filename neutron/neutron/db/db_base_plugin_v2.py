@@ -30,6 +30,8 @@ from neutron import context as ctx
 from neutron.db import api as db
 from neutron.db import common_db_mixin
 from neutron.db import models_v2
+from neutron.db.models_v2 import InfobloxDNSMember
+from neutron.db.models_v2 import InfobloxDHCPMember
 from neutron.db import sqlalchemyutils
 from neutron.extensions import l3
 from neutron import manager
@@ -430,7 +432,12 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
         # the new_ips contain all of the fixed_ips that are to be updated
         if len(new_ips) > cfg.CONF.max_fixed_ips_per_port:
-            msg = _('Exceeded maximim amount of fixed ips per port')
+            msg = _('Exceeded maximim amount of fixed ips per port:'
+                    ' total %(total_new)s > %(conf_max)s' % {
+                'total_new': len(new_ips),
+                'conf_max': cfg.CONF.max_fixed_ips_per_port}
+            )
+            LOG.error(new_ips)
             raise n_exc.InvalidInput(error_message=msg)
 
         # Remove all of the intersecting elements
@@ -711,6 +718,22 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             if old_ra_mode_set or old_address_mode_set:
                 raise n_exc.InvalidInput(error_message=msg)
 
+    def _collect_dhcp_members_for_network(self, context, network):
+        dhcp_members = context.session.query(InfobloxDHCPMember)
+        dhcp_result = dhcp_members.filter_by(network_id=network['id'])
+        dhcp_list = []
+        for dhcp in dhcp_result:
+            dhcp_list.append(dhcp.server_ip)
+        return dhcp_list
+
+    def _collect_dns_members_for_network(self, context, network):
+        dns_members = context.session.query(InfobloxDNSMember)
+        dns_result = dns_members.filter_by(network_id=network['id'])
+        dns_list = []
+        for dns in dns_result:
+            dns_list.append(dns.server_ip)
+        return dns_list
+
     def _make_network_dict(self, network, fields=None,
                            process_extensions=True):
         res = {'id': network['id'],
@@ -721,7 +744,16 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                'shared': network['shared'],
                'subnets': [subnet['id']
                            for subnet in network['subnets']]}
-        res.update(self.ddi.get_additional_network_dict_params(network))
+
+        ctx_admin = ctx.get_admin_context()
+
+        dns_list = self._collect_dns_members_for_network(ctx_admin, network)
+        dhcp_list = self._collect_dhcp_members_for_network(ctx_admin, network)
+
+        res.update({
+            'dns_relay_ips': dns_list,
+            'dhcp_relay_ips': dhcp_list
+        })
 
         # Call auxiliary extend functions, if any
         if process_extensions:

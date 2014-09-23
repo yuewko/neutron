@@ -39,7 +39,13 @@ class InfobloxObjectManipulator(object):
         network_data = {'network_view': net_view_name,
                         'network': cidr,
                         'extattrs': network_extattrs}
-        if member:
+        if member and isinstance(member, list):
+            members_struct = []
+            for some_member in member:
+                members_struct.append({'ipv4addr': some_member.ip,
+                                       '_struct': 'dhcpmember'})
+            network_data['members'] = members_struct
+        elif member:
             network_data['members'] = [{'ipv4addr': member.ip,
                                         '_struct': 'dhcpmember'}]
 

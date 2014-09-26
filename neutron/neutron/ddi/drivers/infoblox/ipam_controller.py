@@ -17,7 +17,7 @@ from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
 from neutron.db.infoblox import infoblox_db
-from neutron.db import models_v2
+from neutron.db.infoblox import models
 from neutron.ddi.drivers.infoblox import config
 from neutron.ddi.drivers.infoblox import dns_controller
 from neutron.ddi.drivers.infoblox import ea_manager
@@ -58,6 +58,8 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         cfg = self.config_finder.find_config_for_subnet(context, subnet)
         dhcp_members = cfg.reserve_dhcp_members()
         dns_members = cfg.reserve_dns_members()
+        infoblox_db.set_network_view(context, cfg.network_view,
+                                     s['network_id'])
 
         create_subnet_flow = linear_flow.Flow('ib_create_subnet')
 
@@ -69,10 +71,7 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         # the beginning of the list.
         # If this net is not flat, Member IP will later be replaced by
         # DNS relay IP.
-        if isinstance(dhcp_members, list):
-            nameservers = [item.ip for item in dhcp_members] + user_nameservers
-        else:
-            nameservers = [dhcp_members.ip] + user_nameservers
+        nameservers = [item.ip for item in dhcp_members] + user_nameservers
 
         network = self._get_network(context, subnet['network_id'])
         network_extattrs = self.ea_manager.get_extattrs_for_network(
@@ -88,20 +87,15 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
                             'network_extattrs': network_extattrs}
 
         if not cfg.is_external and cfg.require_dhcp_relay:
-            dns_members_list = [member.ip for member in dns_members]
-            dhcp_members_list = [member.ip for member in dhcp_members]
-            network.update(dict(dns_relay_ips=dns_members_list,
-                                dhcp_relay_ips=dhcp_members_list))
-
             for member in dhcp_members:
-                dhcp_member = models_v2.InfobloxDHCPMember(
+                dhcp_member = models.InfobloxDHCPMember(
                     server_ip=member.ip,
                     network_id=network.id
                 )
                 context.session.add(dhcp_member)
 
             for member in dns_members:
-                dns_member = models_v2.InfobloxDNSMember(
+                dns_member = models.InfobloxDNSMember(
                     server_ip=member.ip,
                     network_id=network.id
                 )
@@ -172,7 +166,6 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         return backend_subnet
 
     def delete_subnet(self, context, subnet):
-        LOG.info('ipam_controller.delete_subnet')
         deleted_subnet = super(InfobloxIPAMController, self).delete_subnet(
             context, subnet)
 
@@ -180,10 +173,10 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         network = self._get_network(context, subnet['network_id'])
 
         if not cfg.is_external and cfg.require_dhcp_relay:
-            member = context.session.query(models_v2.InfobloxDNSMember)
+            member = context.session.query(models.InfobloxDNSMember)
             member.filter_by(network_id=network.id).delete()
 
-            member = context.session.query(models_v2.InfobloxDHCPMember)
+            member = context.session.query(models.InfobloxDHCPMember)
             member.filter_by(network_id=network.id).delete()
 
         self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
@@ -195,10 +188,6 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         if (preconf_dns_view
                 and not self.infoblox.has_dns_zones(preconf_dns_view)):
             self.infoblox.delete_dns_view(preconf_dns_view)
-
-        # Delete network view only if there are no NIOS networks there
-        if not self.infoblox.has_networks(cfg.network_view):
-            self.infoblox.delete_network_view(cfg.network_view)
 
         return deleted_subnet
 
@@ -275,9 +264,13 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
 
     def delete_network(self, context, network_id):
         subnets = self.get_subnets_by_network(context, network_id)
+        net_view = infoblox_db.get_network_view(context, network_id)
 
         for subnet in subnets:
             LOG.info('Removing subnet %s from network %s.' % (
                 subnet.id, network_id
             ))
             self.delete_subnet(context, subnet)
+
+        if not self.infoblox.has_networks(net_view):
+            self.infoblox.delete_network_view(net_view)

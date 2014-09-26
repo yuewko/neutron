@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from neutron.db.infoblox import models
 from neutron.ddi.drivers.infoblox import config
 from neutron.ddi.drivers.infoblox import connector
 from neutron.ddi.drivers.infoblox import dns_controller
@@ -63,3 +64,27 @@ class InfobloxDDI(neutron_ddi.NeutronDDI):
         taskflow.engines.run(context.parent_flow, store=context.store)
 
         return retval
+
+    def _collect_members_ips(self, context, network, model):
+        members = context.session.query(model)
+        result = members.filter_by(network_id=network['id'])
+        ip_list = []
+        for member in result:
+            ip_list.append(member.server_ip)
+        return ip_list
+
+    def get_additional_network_dict_params(self, ctx, network):
+        ctx_admin = ctx.get_admin_context()
+
+        dns_list = self._collect_members_ips(ctx_admin,
+                                             network,
+                                             models.InfobloxDNSMember)
+
+        dhcp_list = self._collect_members_ips(ctx_admin,
+                                              network,
+                                              models.InfobloxDHCPMember)
+
+        return {
+            'dns_relay_ips': dns_list,
+            'dhcp_relay_ips': dhcp_list
+        }

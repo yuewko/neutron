@@ -15,14 +15,17 @@
 
 import io
 import json
+import logging
 from operator import attrgetter
 
 from oslo.config import cfg as neutron_conf
 
 from neutron.db.infoblox import infoblox_db as ib_db
+from neutron.db.infoblox import models as ib_models
 from neutron.ddi.drivers.infoblox import exceptions
 from neutron.ddi.drivers.infoblox import objects
 
+LOG = logging.getLogger(__name__)
 OPTS = [
     neutron_conf.StrOpt('conditional_config', default=None,
                         help=_("Infoblox conditional config path")),
@@ -186,8 +189,9 @@ class Config(object):
 
         self.require_dhcp_relay = config_dict.get('require_dhcp_relay', False)
 
+        self._dhcp_members = config_dict.get('dhcp_members',
+                                             self.NEXT_AVAILABLE_MEMBER)
         self._dns_members = config_dict.get('dns_members')
-        self._dhcp_members = config_dict.get('dhcp_members')
 
         self.domain_suffix_pattern = config_dict.get(
             'domain_suffix_pattern', 'global.com')
@@ -235,11 +239,11 @@ class Config(object):
 
     @property
     def dhcp_member(self):
-        return self._get_member(ib_db.DHCP_MEMBER_TYPE)
+        return self._get_member(ib_models.DHCP_MEMBER_TYPE)
 
     @property
     def dns_member(self):
-        return self._get_member(ib_db.DNS_MEMBER_TYPE)
+        return self._get_member(ib_models.DNS_MEMBER_TYPE)
 
     @property
     def is_global_config(self):
@@ -248,23 +252,25 @@ class Config(object):
     def reserve_dns_members(self):
         reserved_members = self._reserve_member(self._dns_members,
                                                 self.ns_group,
-                                                ib_db.DNS_MEMBER_TYPE)
+                                                ib_models.DNS_MEMBER_TYPE)
 
         if isinstance(reserved_members, list):
             return reserved_members
-        else:
+        elif reserved_members:
             return [reserved_members]
+        else:
+            return []
 
     def reserve_dhcp_members(self):
         reserved_members = self._reserve_member(self._dhcp_members,
-                                               self.network_template,
-                                               ib_db.DHCP_MEMBER_TYPE)
+                                                self.network_template,
+                                                ib_models.DHCP_MEMBER_TYPE)
         # use DHCP member for DNS if DNS is not set
         if self._dns_members is None:
             self._dns_members = self._dhcp_members
             self._reserve_member(self._dhcp_members,
                                  self.network_template,
-                                 ib_db.DNS_MEMBER_TYPE)
+                                 ib_models.DNS_MEMBER_TYPE)
 
         if isinstance(reserved_members, list):
             return reserved_members
@@ -302,46 +308,25 @@ class Config(object):
                "first!".format(member_type=member_type))
         raise RuntimeError(msg)
 
-    def _reserve_member(self, members, template, member_type):
-        if isinstance(members, list):
-            members_to_reserve = [self.member_manager.get_member(member)
-                           for member in members]
-            for member in members_to_reserve:
-                self.member_manager.reserve_member(self.context,
-                                                   self.network_view,
-                                                   member.name,
-                                                   member_type)
-            return members_to_reserve
-
-        member = self.member_manager.find_member(self.context,
-                                                 self.network_view,
-                                                 member_type)
-
-        if member:
-            return member
-
-        if template:
-            member = self._get_member_from_template(members,
-                                                    template)
+    def _reserve_members_list(self, members, member_type):
+        members_to_reserve = [self.member_manager.get_member(member)
+                              for member in members]
+        for member in members_to_reserve:
             self.member_manager.reserve_member(self.context,
                                                self.network_view,
                                                member.name,
                                                member_type)
-            return member
+        return members_to_reserve
 
-        member_explicitly_set = not (
-            members == self.NEXT_AVAILABLE_MEMBER or
-            isinstance(members, list)
-        )
+    def _reserve_by_template(self, members, template, member_type):
+        member = self._get_member_from_template(members, template)
+        self.member_manager.reserve_member(self.context,
+                                           self.network_view,
+                                           member.name,
+                                           member_type)
+        return member
 
-        if member_explicitly_set:
-            member = self.member_manager.get_member(members)
-            self.member_manager.reserve_member(self.context,
-                                               self.network_view,
-                                               member.name,
-                                               member_type)
-            return member
-
+    def _reserve_next_avaliable(self, members, member_type):
         member = self.member_manager.next_available(self.context,
                                                     members,
                                                     member_type)
@@ -350,6 +335,22 @@ class Config(object):
                                            member.name,
                                            member_type)
         return member
+
+    def _reserve_member(self, members, template, member_type):
+        member = self.member_manager.find_member(self.context,
+                                                 self.network_view,
+                                                 member_type)
+        if member:
+            return member
+
+        if members == self.NEXT_AVAILABLE_MEMBER:
+            return self._reserve_next_avaliable(members, member_type)
+        elif isinstance(members, list):
+            return self._reserve_members_list(members, member_type)
+        elif template:
+            return self._reserve_by_template(members,
+                                             template,
+                                             member_type)
 
     def _get_member_from_template(self, members, template):
         member_defined = (members != self.NEXT_AVAILABLE_MEMBER and
@@ -381,7 +382,7 @@ class MemberManager(object):
 
     def next_available(self, context,
                        members_to_choose_from=Config.NEXT_AVAILABLE_MEMBER,
-                       member_type=ib_db.DHCP_MEMBER_TYPE):
+                       member_type=ib_models.DHCP_MEMBER_TYPE):
         if members_to_choose_from == Config.NEXT_AVAILABLE_MEMBER:
             members_to_choose_from = map(attrgetter('name'),
                                          self.available_members)

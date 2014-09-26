@@ -25,10 +25,6 @@ from neutron.ddi.drivers.infoblox import objects
 from neutron.tests import base
 
 
-class SomeException(Exception):
-    pass
-
-
 class SubstringMatcher(object):
     def __init__(self, expected):
         self.expected = expected
@@ -52,7 +48,14 @@ class CreateSubnetTestCases(base.BaseTestCase):
         self.subnet.__getitem__.side_effect = mock.MagicMock()
         self.object_manipulator = mock.Mock()
         ip_allocator = mock.Mock()
+
+        cfg = mock.Mock()
+        cfg.reserve_dhcp_members = mock.Mock(return_value=[])
+        cfg.reserve_dns_members = mock.Mock(return_value=[])
+
         config_finder = mock.Mock()
+        config_finder.find_config_for_subnet = mock.Mock(return_value=cfg)
+
         context = infoblox_ddi.FlowContext(mock.MagicMock(),
                                            'create-subnet')
 
@@ -368,10 +371,8 @@ class DeleteSubnetTestCase(base.BaseTestCase):
         context = mock.MagicMock()
 
         cidr = '192.168.0.0/24'
-        subnet = {'cidr': cidr,
-                  'tenant_id': 'some-id',
-                  'enable_dhcp': False,
-                  'id': 'some-id'}
+        subnet = mock.MagicMock()
+        subnet.__getitem__ = mock.Mock(return_value=cidr)
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_conf,
@@ -387,11 +388,7 @@ class DeleteSubnetTestCase(base.BaseTestCase):
         ip_allocator = mock.Mock()
         context = mock.MagicMock()
 
-        cidr = '192.168.0.0/24'
-        subnet = {'cidr': cidr,
-                  'tenant_id': 'some-id',
-                  'enable_dhcp': True,
-                  'id': 'some-id'}
+        subnet = mock.MagicMock()
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_finder,
@@ -410,8 +407,7 @@ class DeleteSubnetTestCase(base.BaseTestCase):
         config_finder = mock.Mock()
         config_finder.find_config_for_subnet = mock.Mock(return_value=config)
         context = mock.Mock()
-        subnet = {'id': 'some-id',
-                  'cidr': '1.2.3.0/24'}
+        subnet = mock.MagicMock()
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    config_finder,
@@ -427,8 +423,7 @@ class DeleteSubnetTestCase(base.BaseTestCase):
         ip_allocator = mock.Mock()
         member_conf = mock.Mock()
         context = mock.Mock()
-        network = {'id': 'some-id',
-                   'cidr': '1.2.3.0/24'}
+        network = mock.MagicMock()
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_conf,
@@ -505,3 +500,18 @@ class DeleteNetworkTestCase(base.BaseTestCase):
 
         assert b.delete_subnet.called
         assert b.delete_subnet.call_count == num_subnets
+
+    def test_deletes_network_view(self):
+        infoblox = mock.Mock()
+        ip_allocator = mock.Mock()
+        member_conf = mock.Mock()
+        context = mock.MagicMock()
+        network_id = 'some-id'
+
+        b = ipam_controller.InfobloxIPAMController(infoblox,
+                                                   member_conf,
+                                                   ip_allocator)
+
+        b.delete_network(context, network_id)
+
+        assert infoblox.delete_network_view.called_once

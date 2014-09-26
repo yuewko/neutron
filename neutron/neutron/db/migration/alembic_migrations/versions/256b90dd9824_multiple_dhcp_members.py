@@ -16,14 +16,14 @@
 """Multiple DHCP members
 
 Revision ID: 256b90dd9824
-Revises: d9841b33bd
+Revises: 172ace2194db
 Create Date: 2014-09-15 05:54:38.612277
 
 """
 
 # revision identifiers, used by Alembic.
 revision = '256b90dd9824'
-down_revision = 'd9841b33bd'
+down_revision = '172ace2194db'
 
 # Change to ['*'] if this migration applies to all plugins
 
@@ -47,8 +47,6 @@ def upgrade(active_plugins=None, options=None):
         sa.Column('id', sa.String(length=36), nullable=False),
         sa.Column('network_id', sa.String(length=36), nullable=False),
         sa.Column('server_ip', sa.String(length=40), nullable=False),
-        sa.Column('server_name', sa.String(length=256), nullable=True),
-        sa.Column('online', sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(['network_id'], ['networks.id'],
                                 ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'))
@@ -58,14 +56,13 @@ def upgrade(active_plugins=None, options=None):
         sa.Column('id', sa.String(length=36), nullable=False),
         sa.Column('network_id', sa.String(length=36), nullable=False),
         sa.Column('server_ip', sa.String(length=40), nullable=False),
-        sa.Column('server_name', sa.String(length=256), nullable=True),
-        sa.Column('online', sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(['network_id'], ['networks.id'],
                                 ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'))
 
     op.drop_column('networks', 'dhcp_relay_ip')
     op.drop_column('networks', 'dns_relay_ip')
+
 
 def downgrade(active_plugins=None, options=None):
     if not migration.should_run(active_plugins, migration_for_plugins):

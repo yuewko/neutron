@@ -29,10 +29,10 @@ from neutron.openstack.common import uuidutils
 LOG = logging.getLogger(__name__)
 
 OPTS = [
-    cfg.StrOpt('dhcp_relay_ip',
+    cfg.StrOpt('dhcp_relay_ips',
                default=None,
                help=_('IP address of DHCP server to relay to.')),
-    cfg.StrOpt('dns_relay_ip',
+    cfg.StrOpt('dns_relay_ips',
                default=None,
                help=_('IP address of DNS server to relay to.')),
     cfg.StrOpt('ddi_proxy_bridge',
@@ -92,22 +92,22 @@ class DdiProxy(dhcp.DhcpLocalProcess):
                 opt_name='ddi_proxy_bridge',
                 opt_value=self.conf.ddi_proxy_bridge)
 
-        dhcp_relay_ip = self._get_relay_ips('dhcp_relay_ip')
-        if not dhcp_relay_ip:
+        dhcp_relay_ips = self._get_relay_ips('dhcp_relay_ips')
+        if not dhcp_relay_ips:
             LOG.error(_('dhcp_relay_ip must be specified in config or in '
                         'network properties.'))
             raise exc.InvalidConfigurationOption(
-                opt_name='dhcp_relay_ip',
-                opt_value=dhcp_relay_ip
+                opt_name='dhcp_relay_ips',
+                opt_value=dhcp_relay_ips
             )
 
-        dns_relay_ip = self._get_relay_ips('dns_relay_ip')
-        if not dns_relay_ip:
+        dns_relay_ips = self._get_relay_ips('dns_relay_ips')
+        if not dns_relay_ips:
             LOG.error(_('dns_relay_ip must be specified in config or in '
                         'network properties.'))
             raise exc.InvalidConfigurationOption(
-                opt_name='dns_relay_ip',
-                opt_value=dns_relay_ip
+                opt_name='dns_relay_ips',
+                opt_value=dns_relay_ips
             )
 
         self.dev_name_len = self._calc_dev_name_len()
@@ -224,7 +224,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
 
     def _spawn_dhcp_proxy(self):
         """Spawns a dhcrelay process for the network."""
-        relay_ips = self._get_relay_ips('dhcp_relay_ip')
+        relay_ips = self._get_relay_ips('dhcp_relay_ips')
 
         if not relay_ips:
             LOG.error(_('DHCP relay server isn\'t defined for network %s'),
@@ -255,7 +255,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
 
     def _spawn_dns_proxy(self):
         """Spawns a Dnsmasq process in DNS relay only mode for the network."""
-        relay_ips = self._get_relay_ips('dns_relay_ip')
+        relay_ips = self._get_relay_ips('dns_relay_ips')
 
         if not relay_ips:
             LOG.error(_('DNS relay server isn\'t defined for network %s'),
@@ -307,8 +307,6 @@ class DdiProxy(dhcp.DhcpLocalProcess):
 
     def _get_relay_ips(self, ip_opt_name):
         # Try to get relay IP from the config.
-        ip_opt_name = '%ss' % ip_opt_name
-
         relay_ips = getattr(self.conf, ip_opt_name, None)
         # If not specified in config try to get from network object.
         if not relay_ips:

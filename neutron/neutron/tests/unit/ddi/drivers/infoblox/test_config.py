@@ -21,6 +21,7 @@ from operator import itemgetter
 from testtools import matchers
 
 from neutron.db.infoblox import infoblox_db
+from neutron.db.infoblox import models
 from neutron.ddi.drivers.infoblox import config
 from neutron.ddi.drivers.infoblox import exceptions
 from neutron.ddi.drivers.infoblox import objects
@@ -335,8 +336,8 @@ class ConfigTestCase(base.BaseTestCase):
         }
 
         cfg = config.Config(conf_dict, context, subnet, member_manager)
-        member = cfg.reserve_dhcp_member()
-        self.assertEqual(member, expected_member)
+        members = cfg.reserve_dhcp_members()
+        self.assertEqual(members[0], expected_member)
         assert member_manager.find_member.called_once
         assert member_manager.next_available.called_once
         assert member_manager.reserve_meber.called_once
@@ -409,6 +410,32 @@ class ConfigTestCase(base.BaseTestCase):
             reserved_members = cfg.reserve_dns_members()
 
             self.assertTrue(isinstance(reserved_members, list))
+
+    def test_reserve_members_list(self):
+        def mock_get_member(member_name):
+            return objects.Member(ip='10.20.30.40', name=member_name)
+
+        conf = {'condition': 'global'}
+        members = ['member40.com', 'member41.com']
+
+        context = mock.Mock()
+        subnet = mock.Mock()
+
+        member_manager = mock.Mock()
+        member_manager.get_member = mock_get_member
+        member_manager.find_member = mock.Mock(return_value=None)
+
+        cfg = config.Config(conf, context, subnet, member_manager)
+        cfg._dhcp_members = members
+        reserved_members = cfg.reserve_dhcp_members()
+
+        self.assertEqual(
+            reserved_members,
+            [
+                objects.Member(ip='10.20.30.40', name='member40.com'),
+                objects.Member(ip='10.20.30.40', name='member41.com')
+            ]
+        )
 
     def test_subnet_update_not_allowed_if_subnet_name_is_in_pattern(self):
         context = mock.Mock()
@@ -505,10 +532,10 @@ class MemberManagerTestCase(base.BaseTestCase):
 
         with mock.patch.object(infoblox_db, 'attach_member') as attach_mock:
             mm.reserve_member(context, mapping, member_name,
-                              infoblox_db.DHCP_MEMBER_TYPE)
+                              models.DHCP_MEMBER_TYPE)
 
             attach_mock.assert_called_once_with(
-                context, mapping, member_name, infoblox_db.DHCP_MEMBER_TYPE)
+                context, mapping, member_name, models.DHCP_MEMBER_TYPE)
 
     def test_finds_member_for_mapping(self):
         context = mock.Mock()
@@ -523,7 +550,7 @@ class MemberManagerTestCase(base.BaseTestCase):
         with mock.patch.object(infoblox_db, 'get_member') as get_mock:
             get_mock.return_value = expected_member
             member = mm.find_member(context, mapping,
-                                    infoblox_db.DHCP_MEMBER_TYPE)
+                                    models.DHCP_MEMBER_TYPE)
 
             self.assertEqual(expected_ip, member.ip)
             self.assertEqual(expected_member, member.name)

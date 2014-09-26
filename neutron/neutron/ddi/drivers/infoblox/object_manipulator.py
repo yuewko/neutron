@@ -34,20 +34,16 @@ class InfobloxObjectManipulator(object):
                          'network_view': net_view_name}
         return self._create_infoblox_object('view', dns_view_data)
 
-    def create_network(self, net_view_name, cidr, nameservers, member,
+    def create_network(self, net_view_name, cidr, nameservers, members,
                        gateway_ip, network_extattrs):
         network_data = {'network_view': net_view_name,
                         'network': cidr,
                         'extattrs': network_extattrs}
-        if member and isinstance(member, list):
-            members_struct = []
-            for some_member in member:
-                members_struct.append({'ipv4addr': some_member.ip,
-                                       '_struct': 'dhcpmember'})
-            network_data['members'] = members_struct
-        elif member:
-            network_data['members'] = [{'ipv4addr': member.ip,
-                                        '_struct': 'dhcpmember'}]
+        members_struct = []
+        for member in members:
+            members_struct.append({'ipv4addr': member.ip,
+                                   '_struct': 'dhcpmember'})
+        network_data['members'] = members_struct
 
         dhcp_options = []
 
@@ -132,6 +128,31 @@ class InfobloxObjectManipulator(object):
         created_fa = self._create_infoblox_ip_address(fa)
         return created_fa
 
+    def update_host_record_eas(self, network_view, ip, extattrs):
+        fa_data = {'view': network_view,
+                   'ipv4addr': ip}
+        fa = self._get_infoblox_object_or_none('record:host', fa_data)
+        self._update_infoblox_object_by_ref(fa['_ref'],
+                                            {'extattrs': extattrs})
+
+    def update_fixed_address_eas(self, network_view, ip, extattrs):
+        fa_data = {'network_view': network_view,
+                   'ipv4addr': ip}
+        fa = self._get_infoblox_object_or_none('fixedaddress', fa_data)
+        self._update_infoblox_object_by_ref(fa['_ref'],
+                                            {'extattrs': extattrs})
+
+    def update_dns_record_extattrs(self, dns_view, ip, extattrs):
+        fa_data = {'view': dns_view,
+                   'ipv4addr': ip}
+        fa = self._get_infoblox_object_or_none('record:a', fa_data)
+        self._update_infoblox_object_by_ref(fa['_ref'],
+                                            {'extattrs': extattrs})
+
+        fa = self._get_infoblox_object_or_none('record:ptr', fa_data)
+        self._update_infoblox_object_by_ref(fa['_ref'],
+                                            {'extattrs': extattrs})
+
     def delete_host_record(self, dns_view_name, ip_address):
         host_record_data = {'view': dns_view_name,
                             'ipv4addr': ip_address}
@@ -192,23 +213,21 @@ class InfobloxObjectManipulator(object):
 
         return objects.Network.from_dict(net)
 
-    def bind_name_with_host_record(self, dnsview_name, ip, name, extattrs):
+    def bind_name_with_host_record(self, dnsview_name, ip, name):
         record_host = {
             'ipv4addr': ip,
             'view': dnsview_name
         }
-        update_kwargs = {'name': name,
-                         'extattrs': extattrs}
+        update_kwargs = {'name': name}
         self._update_infoblox_object('record:host', record_host, update_kwargs)
 
-    def bind_name_with_record_a(self, dnsview_name, ip, name, extattrs):
+    def bind_name_with_record_a(self, dnsview_name, ip, name):
         # Forward mapping
         payload = {
             'name': name,
             'view': dnsview_name
         }
-        additional_create_kwargs = {'ipv4addr': ip,
-                                    'extattrs': extattrs}
+        additional_create_kwargs = {'ipv4addr': ip}
         self._create_infoblox_object('record:a', payload,
                                      additional_create_kwargs,
                                      check_if_exists=True)
@@ -218,8 +237,7 @@ class InfobloxObjectManipulator(object):
             'ptrdname': name,
             'view': dnsview_name
         }
-        additional_create_kwargs = {'ipv4addr': ip,
-                                    'extattrs': extattrs}
+        additional_create_kwargs = {'ipv4addr': ip}
         self._create_infoblox_object('record:ptr', record_ptr_data,
                                      additional_create_kwargs,
                                      check_if_exists=True)

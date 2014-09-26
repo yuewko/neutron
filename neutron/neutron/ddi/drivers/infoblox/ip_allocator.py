@@ -40,18 +40,21 @@ class IPAllocator(object):
         pass
 
     @abc.abstractmethod
-    def bind_names(self, dnsview_name, ip, name, extattrs):
+    def bind_names(self, dnsview_name, ip, name):
         pass
 
     @abc.abstractmethod
     def unbind_names(self, dnsview_name, ip, name):
         pass
 
+    @abc.abstractmethod
+    def update_extattrs(self, network_view, dns_view, ip, extattrs):
+        pass
+
 
 class HostRecordIPAllocator(IPAllocator):
-    def bind_names(self, dnsview_name, ip, name, extattrs):
-        self.infoblox.bind_name_with_host_record(dnsview_name, ip, name,
-                                                 extattrs)
+    def bind_names(self, dnsview_name, ip, name):
+        self.infoblox.bind_name_with_host_record(dnsview_name, ip, name)
 
     def unbind_names(self, dnsview_name, ip, name):
         # Nothing to delete, all will be deleted together with host record.
@@ -74,10 +77,13 @@ class HostRecordIPAllocator(IPAllocator):
     def deallocate_ip(self, network_view, dns_view_name, ip):
         self.infoblox.delete_host_record(dns_view_name, ip)
 
+    def update_extattrs(self, network_view, dns_view, ip, extattrs):
+        self.infoblox.update_host_record(network_view, ip, extattrs)
+
 
 class FixedAddressIPAllocator(IPAllocator):
-    def bind_names(self, dnsview_name, ip, name, extattrs):
-        self.infoblox.bind_name_with_record_a(dnsview_name, ip, name, extattrs)
+    def bind_names(self, dnsview_name, ip, name):
+        self.infoblox.bind_name_with_record_a(dnsview_name, ip, name)
 
     def unbind_names(self, dnsview_name, ip, name):
         self.infoblox.unbind_name_from_record_a(dnsview_name, ip, name)
@@ -97,6 +103,10 @@ class FixedAddressIPAllocator(IPAllocator):
 
     def deallocate_ip(self, network_view, dns_view_name, ip):
         self.infoblox.delete_fixed_address(network_view, ip)
+
+    def update_extattrs(self, network_view, dns_view, ip, extattrs):
+        self.infoblox.update_fixed_address_eas(network_view, ip, extattrs)
+        self.infoblox.update_dns_record_eas(dns_view, ip, extattrs)
 
 
 def get_ip_allocator(obj_manipulator):

@@ -14,37 +14,20 @@
 #    under the License.
 
 from oslo.config import cfg
-import sqlalchemy as sa
 from sqlalchemy.orm import exc
 
 from neutron.db import external_net_db
+from neutron.db.infoblox import models
 from neutron.db import l3_db
-from neutron.db import model_base
 from neutron.db import models_v2
 from neutron.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 
 
-DHCP_MEMBER_TYPE = 'dhcp'
-DNS_MEMBER_TYPE = 'dns'
-
-
-class InfobloxMemberMap(model_base.BASEV2):
-    """Maps Neutron object to Infoblox member.
-
-    map_id may point to Network ID, Tenant ID or Infoblox network view name
-    depending on configuration. Infoblox member names are unique.
-    """
-
-    member_name = sa.Column(sa.String(255), nullable=False, primary_key=True)
-    map_id = sa.Column(sa.String(255), nullable=False)
-    member_type = sa.Column(sa.Enum(DHCP_MEMBER_TYPE, DNS_MEMBER_TYPE))
-
-
 def get_used_members(context, member_type):
     """Returns used names of members."""
-    query = context.session.query(InfobloxMemberMap.member_name)
+    query = context.session.query(models.InfobloxMemberMap.member_name)
     members = query.filter_by(member_type=member_type).distinct()
     return [m.member_name for m in members]
 
@@ -53,7 +36,7 @@ def get_member(context, map_id, member_type):
     """Returns names of members used by currently used mapping (tenant id,
     network id or Infoblox netview name).
     """
-    q = context.session.query(InfobloxMemberMap)
+    q = context.session.query(models.InfobloxMemberMap)
 
     member = q.filter_by(map_id=map_id, member_type=member_type).first()
 
@@ -64,15 +47,15 @@ def get_member(context, map_id, member_type):
 
 
 def attach_member(context, map_id, member_name, member_type):
-    context.session.add(InfobloxMemberMap(map_id=map_id,
-                                          member_name=member_name,
-                                          member_type=member_type))
+    context.session.add(models.InfobloxMemberMap(map_id=map_id,
+                                                 member_name=member_name,
+                                                 member_type=member_type))
 
 
 def delete_members(context, map_id):
     with context.session.begin(subtransactions=True):
-        context.session.query(InfobloxMemberMap).filter_by(map_id=map_id).\
-            delete()
+        context.session.query(
+            models.InfobloxMemberMap).filter_by(map_id=map_id).delete()
 
 
 def is_last_subnet(context, subnet_id):
@@ -137,6 +120,22 @@ def get_subnet_dhcp_port_address(context, subnet_id):
     if dhcp_port:
         return dhcp_port.ip_address
     return None
+
+
+def get_network_view(context, network_id):
+    query = context.session.query(models.InfobloxNetViews)
+    try:
+        net_view = query.filter_by(network_id=network_id).one()
+    except exc.NoResultFound:
+        return None
+
+    return net_view.network_view
+
+
+def set_network_view(context, network_view, network_id):
+    ib_net_view = models.InfobloxNetViews(network_id=network_id,
+                                          network_view=network_view)
+    context.session.add(ib_net_view)
 
 
 class NetworkL2InfoProvider(object):

@@ -204,17 +204,3 @@ class Network(model_base.BASEV2, HasId, HasTenant):
     status = sa.Column(sa.String(16))
     admin_state_up = sa.Column(sa.Boolean)
     shared = sa.Column(sa.Boolean)
-
-
-class InfobloxDNSMember(model_base.BASEV2, HasId):
-    network_id = sa.Column(sa.String(36), sa.ForeignKey('networks.id'))
-    server_ip = sa.Column(sa.String(40))
-    server_name = sa.Column(sa.String(40), nullable=True)
-    online = sa.Column(sa.Integer, default=1)
-
-
-class InfobloxDHCPMember(model_base.BASEV2, HasId):
-    network_id = sa.Column(sa.String(36), sa.ForeignKey('networks.id'))
-    server_ip = sa.Column(sa.String(40))
-    server_name = sa.Column(sa.String(40), nullable=True)
-    online = sa.Column(sa.Integer, default=1)

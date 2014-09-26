@@ -86,7 +86,7 @@ class InfobloxDNSController(neutron_ddi.NeutronDNSController):
         else:
             return cfg.hostname_pattern
 
-    def _bind_names(self, context, backend_port, binding_func, *args):
+    def _bind_names(self, context, backend_port, binding_func, extattrs=None):
         all_dns_members = []
 
         for ip in backend_port['fixed_ips']:
@@ -102,7 +102,12 @@ class InfobloxDNSController(neutron_ddi.NeutronDNSController):
             fqdn = pattern_builder.build(
                 context, subnet, backend_port, ip_addr)
 
-            binding_func(cfg.dns_view, ip_addr, fqdn, *args)
+            binding_func(cfg.dns_view, ip_addr, fqdn)
+            if extattrs:
+                self.ip_allocator.update_extattrs(cfg.network_view,
+                                                  cfg.dns_view,
+                                                  ip_addr,
+                                                  extattrs)
 
         for member in set(all_dns_members):
             self.infoblox.restart_all_services(member)

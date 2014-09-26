@@ -276,15 +276,17 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         net_view = 'net-view-name'
         cidr = '192.168.1.0/24'
         nameservers = []
-        member = objects.Member(name='just-a-single-member-ip', ip='some-ip')
+        members = [
+            objects.Member(name='just-a-single-member-ip', ip='some-ip')
+        ]
         gateway_ip = '192.168.1.1'
-        expected_members = member.ip
+        expected_members = members[0].ip
         extattrs = mock.Mock()
 
         connector = mock.Mock()
         ibom = om.InfobloxObjectManipulator(connector)
 
-        ibom.create_network(net_view, cidr, nameservers, member, gateway_ip,
+        ibom.create_network(net_view, cidr, nameservers, members, gateway_ip,
                             extattrs)
 
         assert not connector.get_object.called
@@ -366,13 +368,12 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         fqdn = 'host.global.com'
         ip = '192.168.1.1'
 
-        extattrs = mock.Mock()
         connector = mock.Mock()
         connector.get_object.return_value = mock.MagicMock()
 
         ibom = om.InfobloxObjectManipulator(connector)
 
-        ibom.bind_name_with_host_record(dns_view_name, ip, fqdn, extattrs)
+        ibom.bind_name_with_host_record(dns_view_name, ip, fqdn)
 
         matcher = PayloadMatcher({'view': dns_view_name,
                                   PayloadMatcher.ANYKEY: ip})

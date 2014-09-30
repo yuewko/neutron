@@ -128,30 +128,26 @@ class InfobloxObjectManipulator(object):
         created_fa = self._create_infoblox_ip_address(fa)
         return created_fa
 
-    def update_host_record_eas(self, network_view, ip, extattrs):
-        fa_data = {'view': network_view,
+    def update_host_record_eas(self, dns_view, ip, extattrs):
+        fa_data = {'view': dns_view,
                    'ipv4addr': ip}
         fa = self._get_infoblox_object_or_none('record:host', fa_data)
-        self._update_infoblox_object_by_ref(fa['_ref'],
-                                            {'extattrs': extattrs})
+        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
     def update_fixed_address_eas(self, network_view, ip, extattrs):
         fa_data = {'network_view': network_view,
                    'ipv4addr': ip}
         fa = self._get_infoblox_object_or_none('fixedaddress', fa_data)
-        self._update_infoblox_object_by_ref(fa['_ref'],
-                                            {'extattrs': extattrs})
+        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
-    def update_dns_record_extattrs(self, dns_view, ip, extattrs):
+    def update_dns_record_eas(self, dns_view, ip, extattrs):
         fa_data = {'view': dns_view,
                    'ipv4addr': ip}
         fa = self._get_infoblox_object_or_none('record:a', fa_data)
-        self._update_infoblox_object_by_ref(fa['_ref'],
-                                            {'extattrs': extattrs})
+        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
         fa = self._get_infoblox_object_or_none('record:ptr', fa_data)
-        self._update_infoblox_object_by_ref(fa['_ref'],
-                                            {'extattrs': extattrs})
+        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
     def delete_host_record(self, dns_view_name, ip_address):
         host_record_data = {'view': dns_view_name,

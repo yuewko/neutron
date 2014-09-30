@@ -78,7 +78,7 @@ class HostRecordIPAllocator(IPAllocator):
         self.infoblox.delete_host_record(dns_view_name, ip)
 
     def update_extattrs(self, network_view, dns_view, ip, extattrs):
-        self.infoblox.update_host_record(network_view, ip, extattrs)
+        self.infoblox.update_host_record_eas(dns_view, ip, extattrs)
 
 
 class FixedAddressIPAllocator(IPAllocator):

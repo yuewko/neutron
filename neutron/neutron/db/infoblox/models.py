@@ -59,5 +59,6 @@ class InfobloxNetViews(model_base.BASEV2):
 
     network_id = sa.Column(sa.String(36), sa.ForeignKey("networks.id",
                                                         ondelete="CASCADE"),
-                           nullable=False, primary_key=True)
+                           nullable=False,
+                           primary_key=True)
     network_view = sa.Column(sa.String(56))

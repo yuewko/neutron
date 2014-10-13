@@ -135,7 +135,12 @@ def get_network_view(context, network_id):
 def set_network_view(context, network_view, network_id):
     ib_net_view = models.InfobloxNetViews(network_id=network_id,
                                           network_view=network_view)
-    context.session.add(ib_net_view)
+
+    # there should be only one NIOS network view per Openstack network
+    query = context.session.query(models.InfobloxNetViews)
+    obj = query.filter_by(network_id=network_id).first()
+    if not obj:
+        context.session.add(ib_net_view)
 
 
 class NetworkL2InfoProvider(object):

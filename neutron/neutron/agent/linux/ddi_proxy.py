@@ -262,9 +262,9 @@ class DdiProxy(dhcp.DhcpLocalProcess):
                       self.network.id)
             return
 
-        server_list = ""
+        server_list = []
         for relay_ip in relay_ips:
-            server_list += " --server=%s" % relay_ip
+            server_list.append("--server=%s" % relay_ip)
 
         cmd = [
             'dnsmasq',
@@ -274,11 +274,11 @@ class DdiProxy(dhcp.DhcpLocalProcess):
             '--bind-interfaces',
             '--interface=%s' % self.interface_name,
             '--except-interface=lo',
-            '--all-servers',
-            server_list,
-            '--pid-file=%s' % self.get_conf_file_name(
-                'dns_pid', ensure_conf_dir=True),
-        ]
+            '--all-servers']
+        cmd += server_list
+        cmd += ['--pid-file=%s' % self.get_conf_file_name(
+            'dns_pid',
+            ensure_conf_dir=True)]
 
         if self.network.namespace:
             ip_wrapper = ip_lib.IPWrapper(self.root_helper,

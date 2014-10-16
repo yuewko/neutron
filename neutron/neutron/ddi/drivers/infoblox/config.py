@@ -191,7 +191,16 @@ class Config(object):
 
         self._dhcp_members = config_dict.get('dhcp_members',
                                              self.NEXT_AVAILABLE_MEMBER)
-        self._dns_members = config_dict.get('dns_members')
+        self._dns_members = config_dict.get('dns_members',
+                                            self._dhcp_members)
+
+        if not isinstance(self._dns_members, list) and\
+           self._dns_members != self.NEXT_AVAILABLE_MEMBER:
+            self._dns_members = list(self._dns_members)
+
+        if not isinstance(self._dhcp_members, list) and\
+           self._dhcp_members != self.NEXT_AVAILABLE_MEMBER:
+            self._dhcp_members = list(self._dhcp_members)
 
         self.domain_suffix_pattern = config_dict.get(
             'domain_suffix_pattern', 'global.com')
@@ -250,7 +259,8 @@ class Config(object):
         return self.condition == 'global'
 
     def reserve_dns_members(self):
-        reserved_members = self._reserve_member(self._dns_members,
+        members_to_reserve = list(set(self._dns_members))
+        reserved_members = self._reserve_member(members_to_reserve,
                                                 self.ns_group,
                                                 ib_models.DNS_MEMBER_TYPE)
 
@@ -265,12 +275,6 @@ class Config(object):
         reserved_members = self._reserve_member(self._dhcp_members,
                                                 self.network_template,
                                                 ib_models.DHCP_MEMBER_TYPE)
-        # use DHCP member for DNS if DNS is not set
-        if self._dns_members is None:
-            self._dns_members = self._dhcp_members
-            self._reserve_member(self._dhcp_members,
-                                 self.network_template,
-                                 ib_models.DNS_MEMBER_TYPE)
 
         if isinstance(reserved_members, list):
             return reserved_members

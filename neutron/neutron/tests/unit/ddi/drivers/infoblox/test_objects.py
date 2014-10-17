@@ -222,3 +222,27 @@ class MemberTestCase(base.BaseTestCase):
         m2 = objects.Member(ip, name)
 
         self.assertEqual(m1, m2)
+
+
+class IPAllocationObjectTestCase(base.BaseTestCase):
+    def test_next_available_ip_returns_properly_formatted_string(self):
+        net_view = 'expected_net_view_name'
+        first_ip = '1.2.3.4'
+        last_ip = '1.2.3.14'
+        cidr = '1.2.3.0/24'
+
+        naip = objects.IPAllocationObject.next_available_ip_from_range(
+            net_view, first_ip, last_ip)
+
+        self.assertTrue(isinstance(naip, basestring))
+        self.assertTrue(naip.startswith('func:nextavailableip:'))
+        self.assertTrue(naip.endswith(
+            '{first_ip}-{last_ip},{net_view}'.format(**locals())))
+
+        naip = objects.IPAllocationObject.next_available_ip_from_cidr(
+            net_view, cidr)
+
+        self.assertTrue(isinstance(naip, basestring))
+        self.assertTrue(naip.startswith('func:nextavailableip:'))
+        self.assertTrue(naip.endswith(
+            '{cidr},{net_view}'.format(**locals())))

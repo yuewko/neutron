@@ -34,8 +34,8 @@ class InfobloxObjectManipulator(object):
                          'network_view': net_view_name}
         return self._create_infoblox_object('view', dns_view_data)
 
-    def create_network(self, net_view_name, cidr, nameservers, members,
-                       gateway_ip, network_extattrs):
+    def create_network(self, net_view_name, cidr, nameservers=None,
+                       members=None, gateway_ip=None, network_extattrs=None):
         network_data = {'network_view': net_view_name,
                         'network': cidr,
                         'extattrs': network_extattrs}
@@ -101,9 +101,8 @@ class InfobloxObjectManipulator(object):
         hr.zone_auth = zone_auth
         hr.mac = mac
         hr.dns_view = dns_view_name
-        hr.ip = self._next_available_ip(network_view_name,
-                                        first_ip,
-                                        last_ip)
+        hr.ip = objects.IPAllocationObject.next_available_ip_from_range(
+            network_view_name, first_ip, last_ip)
 
         created_hr = self._create_infoblox_ip_address(hr)
         return created_hr
@@ -121,7 +120,8 @@ class InfobloxObjectManipulator(object):
     def create_fixed_address_from_range(self, network_view, mac, first_ip,
                                         last_ip, extattrs):
         fa = objects.FixedAddress()
-        fa.ip = self._next_available_ip(network_view, first_ip, last_ip)
+        fa.ip = objects.IPAllocationObject.next_available_ip_from_range(
+            network_view, first_ip, last_ip)
         fa.net_view = network_view
         fa.mac = mac
         fa.extattrs = extattrs
@@ -149,6 +149,15 @@ class InfobloxObjectManipulator(object):
         fa = self._get_infoblox_object_or_none('record:ptr', fa_data)
         self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
+    def create_fixed_address_from_cidr(self, network_view, mac, cidr):
+        fa = objects.FixedAddress()
+        fa.ip = objects.IPAllocationObject.next_available_ip_from_cidr(
+            network_view, cidr)
+        fa.mac = mac
+        fa.net_view = network_view
+        created_fa = self._create_infoblox_ip_address(fa)
+        return created_fa
+
     def delete_host_record(self, dns_view_name, ip_address):
         host_record_data = {'view': dns_view_name,
                             'ipv4addr': ip_address}
@@ -165,6 +174,12 @@ class InfobloxObjectManipulator(object):
                       'end_addr': end_ip,
                       'network_view': net_view}
         self._delete_infoblox_object('range', range_data)
+
+    def delete_object_by_ref(self, ref):
+        try:
+            self.connector.delete_object(ref)
+        except exc.InfobloxCannotDeleteObject as e:
+            LOG.info(_("Failed to delete an object: %s"), e)
 
     def get_member(self, member):
         return self.connector.get_object('member', {'host_name': member.name})
@@ -317,14 +332,6 @@ class InfobloxObjectManipulator(object):
             return bool(zone)
         except exc.InfobloxSearchError:
             return False
-
-    @staticmethod
-    def _next_available_ip(net_view_name, first_ip, last_ip):
-        return ('func:nextavailableip:'
-                '%(first_ip)s-%(last_ip)s,%(net_view_name)s') % {
-                    'first_ip': first_ip,
-                    'last_ip': last_ip,
-                    'net_view_name': net_view_name}
 
     def _create_infoblox_ip_address(self, ip_object):
         try:

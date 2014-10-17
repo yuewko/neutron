@@ -14,9 +14,11 @@
 #    under the License.
 
 import mock
+from neutron.extensions import external_net
 
 import taskflow.engines
 
+from neutron.common import exceptions as neutron_exc
 from neutron.db.infoblox import infoblox_db as infoblox_db
 from neutron.ddi.drivers.infoblox import exceptions as ib_exceptions
 from neutron.ddi.drivers.infoblox import infoblox_ddi
@@ -598,3 +600,176 @@ class DeleteNetworkTestCase(base.BaseTestCase):
         b.delete_network(context, network_id)
 
         assert infoblox.delete_network_view.called_once
+
+    def test_deletes_management_ip(self):
+        infoblox = mock.Mock()
+        ip_allocator = mock.Mock()
+        member_conf = mock.Mock()
+        context = mock.Mock()
+        network = mock.MagicMock()
+        ib_db = mock.Mock()
+        ea_manager = mock.Mock()
+
+        ib_db.is_network_external.return_value = False
+
+        net_view_name = 'expected_network_view'
+        cidr = 'expected_cidr'
+
+        self.config(dhcp_relay_management_network_view=net_view_name,
+                    dhcp_relay_management_network=cidr)
+
+        b = ipam_controller.InfobloxIPAMController(infoblox,
+                                                   member_conf,
+                                                   ip_allocator,
+                                                   ea_manager,
+                                                   ib_db)
+
+        b.delete_subnet = mock.Mock()
+        b.get_subnets_by_network = mock.MagicMock()
+
+        b.delete_network(context, network)
+        infoblox.delete_object_by_ref.assert_called_once_with(mock.ANY)
+
+    def test_deletes_management_ip_from_db(self):
+        infoblox = mock.Mock()
+        ip_allocator = mock.Mock()
+        member_conf = mock.Mock()
+        context = mock.Mock()
+        expected_net_id = 'some-net-id'
+        ib_db = mock.Mock()
+
+        ib_db.is_network_external.return_value = False
+        net_view_name = 'expected_network_view'
+        cidr = 'expected_cidr'
+
+        self.config(dhcp_relay_management_network_view=net_view_name,
+                    dhcp_relay_management_network=cidr)
+
+        b = ipam_controller.InfobloxIPAMController(infoblox,
+                                                   member_conf,
+                                                   ip_allocator,
+                                                   ib_db=ib_db)
+
+        b.delete_subnet = mock.Mock()
+        b.get_subnets_by_network = mock.MagicMock()
+
+        b.delete_network(context, expected_net_id)
+        ib_db.delete_management_ip.assert_called_once_with(
+            context, expected_net_id)
+
+    def test_does_not_delete_management_network_ip_for_external_net(self):
+        infoblox = mock.Mock()
+        ip_allocator = mock.Mock()
+        member_conf = mock.Mock()
+        context = mock.MagicMock()
+        network_id = mock.MagicMock()
+        ib_db = mock.Mock()
+        ea_manager = mock.Mock()
+
+        ib_db.is_network_external.return_value = True
+
+        net_view_name = 'expected_network_view'
+        cidr = 'expected_cidr'
+
+        self.config(dhcp_relay_management_network_view=net_view_name,
+                    dhcp_relay_management_network=cidr)
+
+        b = ipam_controller.InfobloxIPAMController(infoblox,
+                                                   member_conf,
+                                                   ip_allocator,
+                                                   ea_manager,
+                                                   ib_db)
+        b.delete_network(context, network_id)
+
+        assert not infoblox.delete_object_by_ref.called
+        assert not ib_db.delete_management_ip.called
+
+
+class CreateNetworkTestCase(base.BaseTestCase):
+    def test_creates_fixed_address_object_in_management_network(self):
+        infoblox = mock.Mock()
+        config_finder = mock.Mock()
+        ip_allocator = mock.Mock()
+        ea_manager = mock.Mock()
+        context = mock.Mock()
+        network = mock.MagicMock()
+        network.get.return_value = False
+        network.__getitem__.side_effect = mock.Mock()
+
+        expected_net_view = 'expected_net_view_name'
+        cidr = '1.0.0.0/24'
+        expected_mac = '00:00:00:00:00:00'
+        self.config(dhcp_relay_management_network_view=expected_net_view,
+                    dhcp_relay_management_network=cidr)
+
+        c = ipam_controller.InfobloxIPAMController(infoblox, config_finder,
+                                                   ip_allocator, ea_manager)
+
+        c.create_network(context, network)
+        infoblox.create_fixed_address_from_cidr.assert_called_once_with(
+            expected_net_view, expected_mac, cidr)
+
+    def test_stores_fixed_address_object_in_db(self):
+        infoblox = mock.Mock()
+        config_finder = mock.Mock()
+        ip_allocator = mock.Mock()
+        ea_manager = mock.Mock()
+        context = mock.Mock()
+        ib_db = mock.Mock()
+        expected_net_id = 'some-net-id'
+
+        network = mock.MagicMock()
+        network.get.return_value = False
+        network.__getitem__.side_effect = \
+            lambda key: expected_net_id if key == 'id' else None
+
+        expected_net_view = 'expected_net_view_name'
+        cidr = '1.0.0.0/24'
+        self.config(dhcp_relay_management_network_view=expected_net_view,
+                    dhcp_relay_management_network=cidr)
+
+        c = ipam_controller.InfobloxIPAMController(
+            infoblox, config_finder, ip_allocator, ea_manager, ib_db)
+
+        c.create_network(context, network)
+
+        ib_db.add_management_ip.assert_called_once_with(
+            context, expected_net_id, mock.ANY)
+
+    def test_does_nothing_if_mgmt_net_is_not_set_in_config(self):
+        infoblox = mock.Mock()
+        config_finder = mock.Mock()
+        ip_allocator = mock.Mock()
+        ea_manager = mock.Mock()
+        context = mock.Mock()
+        ib_db = mock.Mock()
+        network = mock.Mock()
+        network.get.return_value = False
+
+        c = ipam_controller.InfobloxIPAMController(
+            infoblox, config_finder, ip_allocator, ea_manager, ib_db)
+
+        c.create_network(context, network)
+
+        assert not infoblox.create_fixed_address_from_cidr.called
+        assert not ib_db.add_management_ip.called
+
+    def test_does_nothing_for_external_net(self):
+        infoblox = mock.Mock()
+        config_finder = mock.Mock()
+        ip_allocator = mock.Mock()
+        ea_manager = mock.Mock()
+        context = mock.Mock()
+        ib_db = mock.Mock()
+        network = mock.Mock()
+
+        c = ipam_controller.InfobloxIPAMController(
+            infoblox, config_finder, ip_allocator, ea_manager, ib_db)
+
+        try:
+            c.create_network(context, network)
+        except neutron_exc.InvalidConfigurationOption as e:
+            self.fail('Unexpected exception: {}'.format(e))
+
+        assert not infoblox.create_fixed_address_from_cidr.called
+        assert not ib_db.add_management_ip.called

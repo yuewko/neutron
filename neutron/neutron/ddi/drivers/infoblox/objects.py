@@ -12,7 +12,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-
 import socket
 
 import neutron.ddi.drivers.infoblox.exceptions as ib_exc
@@ -148,7 +147,19 @@ class Network(object):
         return option['name'] == Network.DNS_NAMESERVERS_OPTION
 
 
-class HostRecordIPv4(object):
+class IPAllocationObject(object):
+    @staticmethod
+    def next_available_ip_from_cidr(net_view_name, cidr):
+        return ('func:nextavailableip:'
+                '{cidr:s},{net_view_name:s}').format(**locals())
+
+    @staticmethod
+    def next_available_ip_from_range(net_view_name, first_ip, last_ip):
+        return ('func:nextavailableip:'
+                '{first_ip:}-{last_ip:s},{net_view_name:s}').format(**locals())
+
+
+class HostRecordIPv4(IPAllocationObject):
     """Sample Infoblox host record object in JSON format:
     {
         "_ref": "record:host/ZG5zLmhvc3QkLjY3OC5jb20uZ2xvYmFsLmNsb3VkLnRl
@@ -175,6 +186,7 @@ class HostRecordIPv4(object):
         self.mac = None
         self.ip = None
         self.dns_view = None
+        self.ref = None
 
     def __repr__(self):
         return "{}".format(self.to_dict())
@@ -214,6 +226,7 @@ class HostRecordIPv4(object):
         host_record.zone_auth = dns_zone
         host_record.mac = mac
         host_record.ip = ip
+        host_record.ref = hr_dict.get('_ref')
 
         return host_record
 
@@ -227,13 +240,14 @@ class HostRecordIPv4(object):
             self._zone_auth = value.lstrip('.')
 
 
-class FixedAddress(object):
+class FixedAddress(IPAllocationObject):
     def __init__(self):
         self.infoblox_type = 'fixedaddress'
         self.ip = None
         self.net_view = None
         self.mac = None
         self.extattrs = None
+        self.ref = None
 
     def __repr__(self):
         return "FixedAddress({})".format(self.to_dict())
@@ -256,6 +270,8 @@ class FixedAddress(object):
         fa.mac = fixed_address_dict.get('mac')
         fa.net_view = fixed_address_dict.get('network_view')
         fa.extattrs = fixed_address_dict.get('extattrs')
+        fa.ref = fixed_address_dict.get('_ref')
+
         return fa
 
     def to_dict(self):

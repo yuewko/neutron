@@ -511,6 +511,7 @@ class NeutronDNSController(base.DNSController):
 
 class NeutronDDI(base.DDI):
     def __init__(self):
+        super(NeutronDDI, self).__init__()
         self.ipam_controller = NeutronIPAMController()
         self.dhcp_controller = NeutronDHCPController()
         self.dns_controller = NeutronDNSController()
@@ -566,5 +567,5 @@ class NeutronDDI(base.DDI):
             return super(NeutronDDI, self).delete_subnets_by_network(
                 context, network_id)
 
-    def get_additional_network_dict_params(self, ctx, network):
+    def get_additional_network_dict_params(self, ctx, network_id):
         return {}

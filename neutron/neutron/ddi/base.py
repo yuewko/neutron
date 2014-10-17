@@ -64,6 +64,9 @@ class BackendController(common_db_mixin.CommonDbMixin):
     def check_network_subnet_pair(self, network, subnet):
         pass
 
+    def get_additional_network_dict_params(self, ctx, network_id):
+        pass
+
 
 class DHCPController(BackendController):
     __meta__ = abc.ABCMeta
@@ -193,6 +196,10 @@ class IPAMController(BackendController):
 
     @abc.abstractmethod
     def deallocate_ip(self, context, backend_subnet, host, ip):
+        pass
+
+    @abc.abstractmethod
+    def create_network(self, context, network):
         pass
 
     @abc.abstractmethod
@@ -330,6 +337,9 @@ class DDI(BackendController):
 
     def get_subnets_count(self, context, filters=None):
         return self.ipam_controller.get_subnets_count(context, filters)
+
+    def create_network(self, context, network):
+        return self.ipam_controller.create_network(context, network)
 
     def delete_network(self, context, network_id,
                        allowed_net_number_for_netview_delete=0):

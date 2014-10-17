@@ -175,3 +175,29 @@ class NetworkL2InfoProvider(object):
                 l2_info[name] = value
 
         return l2_info
+
+
+def add_management_ip(context, network_id, fixed_address):
+    context.session.add(models.InfobloxManagementNetIps(
+        network_id=network_id,
+        ip_address=fixed_address.ip,
+        fixed_address_ref=fixed_address.ref))
+
+
+def delete_management_ip(context, network_id):
+    query = context.session.query(models.InfobloxManagementNetIps)
+    query.filter_by(network_id=network_id).delete()
+
+
+def get_management_ip_ref(context, network_id):
+    query = context.session.query(models.InfobloxManagementNetIps)
+    mgmt_ip = query.filter_by(network_id=network_id).first()
+
+    return mgmt_ip.fixed_address_ref if mgmt_ip else None
+
+
+def get_management_net_ip(context, network_id):
+    query = context.session.query(models.InfobloxManagementNetIps)
+    mgmt_ip = query.filter_by(network_id=network_id).first()
+
+    return mgmt_ip.ip_address if mgmt_ip else None

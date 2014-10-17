@@ -62,3 +62,15 @@ class InfobloxNetViews(model_base.BASEV2):
                            nullable=False,
                            primary_key=True)
     network_view = sa.Column(sa.String(56))
+
+
+class InfobloxManagementNetIps(model_base.BASEV2):
+    """Holds IP addresses allocated on management network for DHCP relay
+    interface
+    """
+
+    __tablename__ = 'infoblox_mgmt_net_ips'
+
+    network_id = sa.Column(sa.String(length=255), primary_key=True)
+    ip_address = sa.Column(sa.String(length=64), nullable=False)
+    fixed_address_ref = sa.Column(sa.String(length=255), nullable=False)

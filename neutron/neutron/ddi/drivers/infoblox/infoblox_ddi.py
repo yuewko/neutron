@@ -73,18 +73,22 @@ class InfobloxDDI(neutron_ddi.NeutronDDI):
             ip_list.append(member.server_ip)
         return ip_list
 
-    def get_additional_network_dict_params(self, ctx, network):
-        ctx_admin = ctx.get_admin_context()
+    def get_additional_network_dict_params(self, ctx, network_id):
+        network = self.ipam_controller._get_network(ctx, network_id)
 
-        dns_list = self._collect_members_ips(ctx_admin,
+        dns_list = self._collect_members_ips(ctx,
                                              network,
                                              models.InfobloxDNSMember)
 
-        dhcp_list = self._collect_members_ips(ctx_admin,
+        dhcp_list = self._collect_members_ips(ctx,
                                               network,
                                               models.InfobloxDHCPMember)
 
+        ib_mgmt_ip = self.ipam_controller.ib_db.get_management_net_ip(
+            ctx, network_id)
+
         return {
-            'dns_relay_ips': dns_list,
-            'dhcp_relay_ips': dhcp_list
+            'external_dns_servers': dns_list,
+            'external_dhcp_servers': dhcp_list,
+            'infoblox_mgmt_iface_ip': ib_mgmt_ip
         }

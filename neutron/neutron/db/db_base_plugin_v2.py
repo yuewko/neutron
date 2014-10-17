@@ -31,6 +31,7 @@ from neutron.db import api as db
 from neutron.db import common_db_mixin
 from neutron.db import models_v2
 from neutron.db import sqlalchemyutils
+from neutron.extensions import external_net
 from neutron.extensions import l3
 from neutron import manager
 from neutron import neutron_plugin_base_v2
@@ -722,8 +723,6 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                'subnets': [subnet['id']
                            for subnet in network['subnets']]}
 
-        res.update(self.ddi.get_additional_network_dict_params(ctx, network))
-
         # Call auxiliary extend functions, if any
         if process_extensions:
             self._apply_dict_extend_functions(
@@ -753,8 +752,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                }
         return self._fields(res, fields)
 
-    def _make_port_dict(self, port, fields=None,
-                        process_extensions=True):
+    def _make_port_dict(self, port, fields=None, process_extensions=True):
         res = {"id": port["id"],
                'name': port['name'],
                "network_id": port["network_id"],
@@ -810,6 +808,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                     'status': n.get('status', constants.NET_STATUS_ACTIVE)}
             network = models_v2.Network(**args)
             context.session.add(network)
+            self.ddi.create_network(context, network)
         return self._make_network_dict(network, process_extensions=False)
 
     def update_network(self, context, id, network):
@@ -866,13 +865,19 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                      sorts=None, limit=None, marker=None,
                      page_reverse=False):
         marker_obj = self._get_marker_obj(context, 'network', limit, marker)
-        return self._get_collection(context, models_v2.Network,
+        nets = self._get_collection(context, models_v2.Network,
                                     self._make_network_dict,
                                     filters=filters, fields=fields,
                                     sorts=sorts,
                                     limit=limit,
                                     marker_obj=marker_obj,
                                     page_reverse=page_reverse)
+
+        for net in nets:
+            net.update(self.ddi.get_additional_network_dict_params(context,
+                net['id']))
+
+        return nets
 
     def get_networks_count(self, context, filters=None):
         return self._get_collection_count(context, models_v2.Network,

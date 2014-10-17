@@ -12,11 +12,11 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-
 import os
 import random
 import socket
 
+import netaddr
 from oslo.config import cfg
 
 from neutron.agent.linux import dhcp
@@ -29,10 +29,10 @@ from neutron.openstack.common import uuidutils
 LOG = logging.getLogger(__name__)
 
 OPTS = [
-    cfg.StrOpt('dhcp_relay_ips',
+    cfg.StrOpt('external_dhcp_servers',
                default=None,
                help=_('IP address of DHCP server to relay to.')),
-    cfg.StrOpt('dns_relay_ips',
+    cfg.StrOpt('external_dns_servers',
                default=None,
                help=_('IP address of DNS server to relay to.')),
     cfg.StrOpt('ddi_proxy_bridge',
@@ -48,7 +48,11 @@ OPTS = [
                help=_('Path to dhcrelay executable.')),
     cfg.BoolOpt('use_link_selection_option',
                 default=True,
-                help=_('Run dhcrelay with -l flag.'))
+                help=_('Run dhcrelay with -l flag.')),
+    cfg.StrOpt('dhcp_relay_management_network',
+               default=None,
+               help=_("CIDR for the management network served by "
+                      "Infoblox DHCP member"))
 ]
 
 
@@ -85,32 +89,24 @@ class DdiProxy(dhcp.DhcpLocalProcess):
         super(DdiProxy, self).__init__(conf, network, root_helper,
                                        version, plugin)
 
-        if not self.conf.ddi_proxy_bridge:
-            LOG.error(_('You must specify an ddi_proxy_bridge option '
-                        'in config'))
-            raise exc.InvalidConfigurationOption(
-                opt_name='ddi_proxy_bridge',
-                opt_value=self.conf.ddi_proxy_bridge)
+        external_dhcp_servers = self._get_relay_ips('external_dhcp_servers')
+        external_dns_servers = self._get_relay_ips('external_dns_servers')
+        required_options = {'ddi_proxy_bridge': self.conf.ddi_proxy_bridge,
+                            'external_dhcp_servers': external_dhcp_servers,
+                            'external_dns_servers': external_dns_servers}
 
-        dhcp_relay_ips = self._get_relay_ips('dhcp_relay_ips')
-        if not dhcp_relay_ips:
-            LOG.error(_('dhcp_relay_ip must be specified in config or in '
-                        'network properties.'))
-            raise exc.InvalidConfigurationOption(
-                opt_name='dhcp_relay_ips',
-                opt_value=dhcp_relay_ips
-            )
-
-        dns_relay_ips = self._get_relay_ips('dns_relay_ips')
-        if not dns_relay_ips:
-            LOG.error(_('dns_relay_ip must be specified in config or in '
-                        'network properties.'))
-            raise exc.InvalidConfigurationOption(
-                opt_name='dns_relay_ips',
-                opt_value=dns_relay_ips
-            )
+        for option_name, option in required_options.iteritems():
+            if not option:
+                LOG.error(_('You must specify an {opt:s} option '
+                            'in config'.format(opt=option_name)))
+                raise exc.InvalidConfigurationOption(
+                    opt_name=option_name,
+                    opt_value=option
+                )
 
         self.dev_name_len = self._calc_dev_name_len()
+        self.device_manager = DnsDhcpProxyDeviceManager(
+            conf, root_helper, plugin)
 
     @classmethod
     def check_version(cls):
@@ -158,8 +154,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
             relay_iface_mac_address,
             self.conf.ddi_proxy_bridge)
 
-        interface_name = self.device_manager.setup(self.network,
-                                                   reuse_existing=True)
+        interface_name = self.device_manager.setup(self.network)
         if self.dhcp_active or self.dns_active:
             self.restart()
         elif self._enable_dns_dhcp():
@@ -224,7 +219,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
 
     def _spawn_dhcp_proxy(self):
         """Spawns a dhcrelay process for the network."""
-        relay_ips = self._get_relay_ips('dhcp_relay_ips')
+        relay_ips = self._get_relay_ips('external_dhcp_servers')
 
         if not relay_ips:
             LOG.error(_('DHCP relay server isn\'t defined for network %s'),
@@ -255,7 +250,7 @@ class DdiProxy(dhcp.DhcpLocalProcess):
 
     def _spawn_dns_proxy(self):
         """Spawns a Dnsmasq process in DNS relay only mode for the network."""
-        relay_ips = self._get_relay_ips('dns_relay_ips')
+        relay_ips = self._get_relay_ips('external_dns_servers')
 
         if not relay_ips:
             LOG.error(_('DNS relay server isn\'t defined for network %s'),
@@ -325,3 +320,59 @@ class DdiProxy(dhcp.DhcpLocalProcess):
             return None
 
         return list(set(relay_ips))
+
+
+class DnsDhcpProxyDeviceManager(dhcp.DeviceManager):
+    def setup_relay(self, network, iface_name, mac_address, relay_bridge):
+        if ip_lib.device_exists(iface_name,
+                                self.root_helper,
+                                network.namespace):
+            LOG.debug(_('Reusing existing device: %s.'), iface_name)
+        else:
+            self.driver.plug(network.id,
+                             network.id,
+                             iface_name,
+                             mac_address,
+                             namespace=network.namespace,
+                             bridge=relay_bridge)
+
+            use_static_ip_allocation = (
+                self.conf.dhcp_relay_management_network is not None)
+
+            if use_static_ip_allocation:
+                self._allocate_static_ip(network, iface_name)
+            else:
+                self._allocate_ip_via_dhcp(network, iface_name)
+
+    def destroy_relay(self, network, device_name, relay_bridge):
+        self.driver.unplug(device_name, namespace=network.namespace,
+                           bridge=relay_bridge)
+
+    def _allocate_static_ip(self, network, iface_name):
+        mgmt_net = self.conf.dhcp_relay_management_network
+        relay_ip = netaddr.IPAddress(network.infoblox_mgmt_iface_ip)
+        relay_net = netaddr.IPNetwork(mgmt_net)
+        relay_ip_cidr = '/'.join([str(relay_ip), str(relay_net.prefixlen)])
+        relay_iface = ip_lib.IPDevice(iface_name, self.root_helper)
+
+        LOG.info(_('Allocating static IP %s for %s interface'),
+                 relay_ip, iface_name)
+
+        if network.namespace:
+            relay_iface.namespace = network.namespace
+
+        relay_iface.addr.add(
+            relay_ip.version, relay_ip_cidr, relay_net.broadcast,
+            scope='link')
+
+    def _allocate_ip_via_dhcp(self, network, iface_name):
+        dhcp_client_cmd = [self.conf.dhclient_path, iface_name]
+
+        LOG.info(_('Running DHCP client for %s interface'), iface_name)
+
+        if network.namespace:
+            ip_wrapper = ip_lib.IPWrapper(self.root_helper,
+                                          network.namespace)
+            ip_wrapper.netns.execute(dhcp_client_cmd)
+        else:
+            utils.execute(dhcp_client_cmd)

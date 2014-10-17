@@ -16,6 +16,7 @@
 from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
+from neutron.common import exceptions as neutron_exc
 from neutron.db.infoblox import infoblox_db
 from neutron.db.infoblox import models
 from neutron.ddi.drivers.infoblox import config
@@ -24,6 +25,7 @@ from neutron.ddi.drivers.infoblox import ea_manager
 from neutron.ddi.drivers.infoblox import exceptions
 from neutron.ddi.drivers.infoblox import tasks
 from neutron.ddi.drivers import neutron_ddi
+from neutron.extensions import external_net
 from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
 
@@ -32,7 +34,15 @@ OPTS = [
     neutron_conf.BoolOpt('use_host_records_for_ip_allocation',
                          default=True,
                          help=_("Use host records for IP allocation. If False "
-                                "then Fixed IP + A + PTR record are used."))
+                                "then Fixed IP + A + PTR record are used.")),
+    neutron_conf.StrOpt('dhcp_relay_management_network_view',
+                        default="default",
+                        help=_("NIOS network view to be used for DHCP inside "
+                                "management network")),
+    neutron_conf.StrOpt('dhcp_relay_management_network',
+                        default=None,
+                        help=_("CIDR for the management network served by "
+                               "Infoblox DHCP member"))
 ]
 
 neutron_conf.CONF.register_opts(OPTS)
@@ -41,7 +51,7 @@ LOG = logging.getLogger(__name__)
 
 class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
     def __init__(self, obj_manip=None, config_finder=None, ip_allocator=None,
-                 extattr_manager=None):
+                 extattr_manager=None, ib_db=None):
         """IPAM backend implementation for Infoblox."""
         self.infoblox = obj_manip
         self.config_finder = config_finder
@@ -51,6 +61,11 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         if extattr_manager is None:
             extattr_manager = ea_manager.InfobloxEaManager(infoblox_db)
         self.ea_manager = extattr_manager
+
+        if ib_db is None:
+            ib_db = infoblox_db
+
+        self.ib_db = ib_db
 
     def create_subnet(self, context, s):
         subnet = super(InfobloxIPAMController, self).create_subnet(context, s)
@@ -159,7 +174,7 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
             updated_nameservers = [primary_dns] + user_nameservers
         else:
             # Network with relays, primary dns is relay_ip
-            primary_dns = infoblox_db.get_subnet_dhcp_port_address(
+            primary_dns = self.ib_db.get_subnet_dhcp_port_address(
                 context, subnet['id'])
             if primary_dns:
                 updated_nameservers = [primary_dns] + user_nameservers
@@ -182,7 +197,7 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
 
         self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
 
-        if infoblox_db.is_last_subnet(context, subnet['id']):
+        if self.ib_db.is_last_subnet(context, subnet['id']):
             cfg.member_manager.release_member(context, cfg.network_view)
             if not cfg.is_external and cfg.require_dhcp_relay:
                 member = context.session.query(models.InfobloxDNSMember)
@@ -253,7 +268,7 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
         cfg = self.config_finder.find_config_for_subnet(context, subnet)
         net_id = subnet['network_id']
         self.ip_allocator.deallocate_ip(cfg.network_view, cfg.dns_view, ip)
-        infoblox_db.delete_ip_allocation(context, net_id, subnet, ip)
+        self.ib_db.delete_ip_allocation(context, net_id, subnet, ip)
 
         for member in set(cfg.dhcp_members):
             self.infoblox.restart_all_services(member)
@@ -274,6 +289,31 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
                 net.update_member_ip_in_dns_nameservers(ip['ip_address'])
             self.infoblox.update_network_options(net)
 
+    def create_network(self, context, network):
+        # external networks should not have static IP allocated
+        is_external = network.get(external_net.EXTERNAL, False)
+
+        if is_external:
+            return network
+
+        if neutron_conf.CONF.dhcp_relay_management_network is None:
+            LOG.info(_('dhcp_relay_management_network option is not set in '
+                       'config. DHCP will be used for management network '
+                       'interface.'))
+            return network
+
+        net_view_name = neutron_conf.CONF.dhcp_relay_management_network_view
+        cidr = neutron_conf.CONF.dhcp_relay_management_network
+        mac = ':'.join(['00'] * 6)
+
+        created_fixed_address = self.infoblox.create_fixed_address_from_cidr(
+            net_view_name, mac, cidr)
+
+        self.ib_db.add_management_ip(context,
+                                     network['id'],
+                                     created_fixed_address)
+        return network
+
     def delete_network(self, context, network_id):
         subnets = self.get_subnets_by_network(context, network_id)
         net_view = infoblox_db.get_network_view(context, network_id)
@@ -286,3 +326,10 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
 
         if not self.infoblox.has_networks(net_view):
             self.infoblox.delete_network_view(net_view)
+        if not self.ib_db.is_network_external(context, network_id):
+            fixed_address_ref = self.ib_db.get_management_ip_ref(context,
+                                                                 network_id)
+
+            if fixed_address_ref is not None:
+                self.infoblox.delete_object_by_ref(fixed_address_ref)
+                self.ib_db.delete_management_ip(context, network_id)

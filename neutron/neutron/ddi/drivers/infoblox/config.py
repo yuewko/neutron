@@ -259,8 +259,7 @@ class Config(object):
         return self.condition == 'global'
 
     def reserve_dns_members(self):
-        members_to_reserve = list(set(self._dns_members))
-        reserved_members = self._reserve_member(members_to_reserve,
+        reserved_members = self._reserve_member(self._dns_members,
                                                 self.ns_group,
                                                 ib_models.DNS_MEMBER_TYPE)
 

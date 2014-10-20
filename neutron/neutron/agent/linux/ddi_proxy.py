@@ -154,7 +154,8 @@ class DdiProxy(dhcp.DhcpLocalProcess):
             relay_iface_mac_address,
             self.conf.ddi_proxy_bridge)
 
-        interface_name = self.device_manager.setup(self.network)
+        interface_name = self.device_manager.setup(self.network,
+                                                   reuse_existing=True)
         if self.dhcp_active or self.dns_active:
             self.restart()
         elif self._enable_dns_dhcp():

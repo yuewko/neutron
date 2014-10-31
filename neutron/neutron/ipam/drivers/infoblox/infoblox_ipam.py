@@ -14,13 +14,13 @@
 #    under the License.
 
 from neutron.db.infoblox import models
-from neutron.ddi.drivers.infoblox import config
-from neutron.ddi.drivers.infoblox import connector
-from neutron.ddi.drivers.infoblox import dns_controller
-from neutron.ddi.drivers.infoblox.ip_allocator import get_ip_allocator
-from neutron.ddi.drivers.infoblox import ipam_controller
-from neutron.ddi.drivers.infoblox import object_manipulator
-from neutron.ddi.drivers import neutron_ddi
+from neutron.ipam.drivers.infoblox import config
+from neutron.ipam.drivers.infoblox import connector
+from neutron.ipam.drivers.infoblox import dns_controller
+from neutron.ipam.drivers.infoblox.ip_allocator import get_ip_allocator
+from neutron.ipam.drivers.infoblox import ipam_controller
+from neutron.ipam.drivers.infoblox import object_manipulator
+from neutron.ipam.drivers import neutron_ipam
 import taskflow.engines
 from taskflow.patterns import linear_flow
 
@@ -35,9 +35,9 @@ class FlowContext(object):
         return getattr(self.context, item)
 
 
-class InfobloxDDI(neutron_ddi.NeutronDDI):
+class InfobloxIPAM(neutron_ipam.NeutronIPAM):
     def __init__(self):
-        super(InfobloxDDI, self).__init__()
+        super(InfobloxIPAM, self).__init__()
 
         config_finder = config.ConfigFinder()
         obj_manipulator = object_manipulator.InfobloxObjectManipulator(
@@ -59,7 +59,7 @@ class InfobloxDDI(neutron_ddi.NeutronDDI):
         context = FlowContext(context, 'create-subnet')
         context.store['subnet'] = subnet
 
-        retval = super(InfobloxDDI, self).create_subnet(context, subnet)
+        retval = super(InfobloxIPAM, self).create_subnet(context, subnet)
 
         taskflow.engines.run(context.parent_flow, store=context.store)
 

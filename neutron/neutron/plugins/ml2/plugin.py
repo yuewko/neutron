@@ -488,7 +488,7 @@ class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
 
                         # Deletes network from backend only.
                         # Doesn't delete database record.
-                        self.ddi.delete_network(
+                        self.ipam.delete_network(
                             context, id,
                             allowed_net_number_for_netview_delete=1)
 

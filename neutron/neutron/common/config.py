@@ -106,8 +106,8 @@ core_opts = [
     cfg.IntOpt('send_events_interval', default=2,
                help=_('Number of seconds between sending events to nova if '
                       'there are any events to send.')),
-    cfg.StrOpt('ddi_driver', default='neutron.ddi.drivers.neutron_ddi.'
-                                     'NeutronDDI', help=_('DDI driver')),
+    cfg.StrOpt('ipam_driver', default='neutron.ipam.drivers.neutron_ipam.'
+                                     'NeutronIPAM', help=_('IPAM driver')),
 ]
 
 core_cli_opts = [

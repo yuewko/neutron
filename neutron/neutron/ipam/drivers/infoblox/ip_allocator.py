@@ -17,6 +17,33 @@ import abc
 
 from oslo.config import cfg
 
+from neutron.openstack.common import log as logging
+
+
+OPTS = [
+    cfg.ListOpt('bind_dns_records_to_fixed_address',
+                default=[],
+                help=_("List of DNS records to bind to "
+                       "Fixed Address during create_port")),
+    cfg.ListOpt('unbind_dns_records_from_fixed_address',
+                default=[],
+                help=_("List of DNS records to unbind from "
+                       "Fixed Address during delete_port. "
+                       "This is typically the same list as "
+                       "that for "
+                       "bind_resource_records_to_fixedaddress")),
+    cfg.ListOpt('delete_dns_records_associated_with_fixed_address',
+                default=[],
+                help=_("List of associated DNS records to delete "
+                       "when a Fixed Address is deleted. This is "
+                       "typically a list of DNS records created "
+                       "independent of the Infoblox Openstack "
+                       "Adaptor (IOA)"))
+]
+
+cfg.CONF.register_opts(OPTS)
+LOG = logging.getLogger(__name__)
+
 
 class IPAllocator(object):
     __metaclass__ = abc.ABCMeta
@@ -83,10 +110,16 @@ class HostRecordIPAllocator(IPAllocator):
 
 class FixedAddressIPAllocator(IPAllocator):
     def bind_names(self, dnsview_name, ip, name):
-        self.infoblox.bind_name_with_record_a(dnsview_name, ip, name)
+        bind_cfg = cfg.CONF.bind_dns_records_to_fixed_address
+        if bind_cfg:
+            self.infoblox.bind_name_with_record_a(
+                dnsview_name, ip, name, bind_cfg)
 
     def unbind_names(self, dnsview_name, ip, name):
-        self.infoblox.unbind_name_from_record_a(dnsview_name, ip, name)
+        unbind_cfg = cfg.CONF.unbind_dns_records_from_fixed_address
+        if unbind_cfg:
+            self.infoblox.unbind_name_from_record_a(
+                dnsview_name, ip, name, unbind_cfg)
 
     def allocate_ip_from_range(self, dnsview_name, networkview_name, zone_auth,
                                hostname, mac, first_ip, last_ip,
@@ -102,6 +135,10 @@ class FixedAddressIPAllocator(IPAllocator):
         return fa.ip
 
     def deallocate_ip(self, network_view, dns_view_name, ip):
+        delete_cfg = cfg.CONF.delete_dns_records_associated_with_fixed_address
+        if delete_cfg:
+            self.infoblox.delete_all_associated_objects(
+                network_view, ip, delete_cfg)
         self.infoblox.delete_fixed_address(network_view, ip)
 
     def update_extattrs(self, network_view, dns_view, ip, extattrs):

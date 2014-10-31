@@ -22,7 +22,7 @@ import netaddr
 from oslo.config import cfg
 
 from neutron.agent.common import config
-from neutron.agent.linux import ddi_proxy
+from neutron.agent.linux import dhcp_relay
 from neutron.agent.linux import dhcp
 from neutron.agent.linux import external_process
 from neutron.agent.linux import interface
@@ -593,7 +593,7 @@ def register_options():
     config.register_agent_state_opts_helper(cfg.CONF)
     config.register_root_helper(cfg.CONF)
     cfg.CONF.register_opts(dhcp.OPTS)
-    cfg.CONF.register_opts(ddi_proxy.OPTS)
+    cfg.CONF.register_opts(dhcp_relay.OPTS)
     cfg.CONF.register_opts(interface.OPTS)
 
 

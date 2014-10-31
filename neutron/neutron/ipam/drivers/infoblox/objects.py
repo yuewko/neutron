@@ -14,7 +14,7 @@
 #    under the License.
 import socket
 
-import neutron.ddi.drivers.infoblox.exceptions as ib_exc
+import neutron.ipam.drivers.infoblox.exceptions as ib_exc
 
 
 def is_valid_ip(ip):

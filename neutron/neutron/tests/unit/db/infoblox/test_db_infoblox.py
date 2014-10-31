@@ -18,7 +18,7 @@
 import mock
 from mock import patch
 
-from neutron.ddi.drivers.infoblox import ea_manager
+from neutron.ipam.drivers.infoblox import ea_manager
 from neutron.tests import base
 
 
@@ -35,15 +35,15 @@ INFOBLOX_NETWORKS = [
     {
         '_ref': 'network_1_fake_ref',
         'extattrs': {
-            'os_subnet_id': {'value': 'fake_subnet_id'},
-            'os_network_id': {'value': 'fake_network_id'}
+            'Subnet ID': {'value': 'fake_subnet_id'},
+            'Network ID': {'value': 'fake_network_id'}
         },
     },
     {
         '_ref': 'network_2_fake_ref',
         'extattrs': {
-            'os_subnet_id': {'value': 'fake_subnet_id'},
-            'os_network_id': {'value': 'fake_network_id'}
+            'Subnet ID': {'value': 'fake_subnet_id'},
+            'Network ID': {'value': 'fake_network_id'}
         },
     }
 ]
@@ -51,16 +51,16 @@ INFOBLOX_NETWORKS = [
 INFOBLOX_IP_OBJECTS = [
     {
         '_ref': 'host_record_1_fake_ref',
-        'extattrs': {'os_port_id': {'value': 'fake_port_id'}}
+        'extattrs': {'Port ID': {'value': 'fake_port_id'}}
     },
     {
         '_ref': 'host_record_2_fake_ref',
-        'extattrs': {'os_port_id': {'value': 'fake_port_id'}}}
+        'extattrs': {'Port ID': {'value': 'fake_port_id'}}}
 ]
 
 
 @mock.patch.object(ea_manager, 'InfobloxEaManager', mock.Mock())
-@patch('neutron.ddi.drivers.infoblox.connector.Infoblox')
+@patch('neutron.ipam.drivers.infoblox.connector.Infoblox')
 class InfobloxBDHooksTestCase(base.BaseTestCase):
     def setUp(self):
         super(InfobloxBDHooksTestCase, self).setUp()
@@ -95,7 +95,7 @@ class InfobloxBDHooksTestCase(base.BaseTestCase):
         #   'filter2_name': ['filter2_value']
         # }
         # That's why we construct filter dict as following:
-        filters = {'infoblox_ea:os_user_id': ['fake_user_id']}
+        filters = {'infoblox_ea:Account': ['fake_user_id']}
         conn_mock = infoblox_mock()
         conn_mock.get_object.return_value = INFOBLOX_IP_OBJECTS
 
@@ -104,7 +104,7 @@ class InfobloxBDHooksTestCase(base.BaseTestCase):
         conn_mock.get_object.assert_called_with(
             ib_objtype,
             return_fields=['extattrs'],
-            extattrs={'os_user_id': {'value': 'fake_user_id'}}
+            extattrs={'Account': {'value': 'fake_user_id'}}
         )
         self.query.filter.assert_called_once()
 
@@ -125,7 +125,7 @@ class InfobloxBDHooksTestCase(base.BaseTestCase):
         #   'filter2_name': ['filter2_value']
         # }
         # That's why we construct filter dict as following:
-        filters = {'infoblox_ea:os_user_id': ['fake_user_id']}
+        filters = {'infoblox_ea:Account': ['fake_user_id']}
         conn_mock = infoblox_mock()
         conn_mock.get_object.return_value = INFOBLOX_NETWORKS
 
@@ -134,13 +134,13 @@ class InfobloxBDHooksTestCase(base.BaseTestCase):
         conn_mock.get_object.assert_called_with(
             'network',
             return_fields=['extattrs'],
-            extattrs={'os_user_id': {'value': 'fake_user_id'}}
+            extattrs={'Account': {'value': 'fake_user_id'}}
         )
         self.query.filter.assert_called_once()
 
     def test_hook_ignored_for_other_objects(self, infoblox_mock):
         conn_mock = infoblox_mock()
-        filters = {'not_infoblox_filter:os_user_id': ['fake_user_id']}
+        filters = {'not_infoblox_filter:Account': ['fake_user_id']}
 
         ea_manager.subnet_extattrs_result_filter_hook(self.query, filters)
 

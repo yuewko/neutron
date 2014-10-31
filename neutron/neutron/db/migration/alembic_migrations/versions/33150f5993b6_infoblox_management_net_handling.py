@@ -41,9 +41,6 @@ from alembic import op
 import sqlalchemy as sa
 
 
-from neutron.db import migration
-
-
 def upgrade(active_plugins=None, options=None):
     op.create_table('infoblox_mgmt_net_ips',
                     sa.Column('network_id',

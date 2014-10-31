@@ -665,8 +665,8 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
             before_router_id = floatingip_db['router_id']
             port = self._core_plugin.get_port(context.elevated(), fip_port_id)
             self._update_fip_assoc(context, fip, floatingip_db, port)
-            ddi = manager.NeutronManager.get_ddi()
-            ddi.update_floatingip(context, floatingip, port)
+            ipam = manager.NeutronManager.get_ipam()
+            ipam.update_floatingip(context, floatingip, port)
 
         router_ids = []
         if before_router_id:

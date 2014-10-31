@@ -23,7 +23,7 @@ from requests import exceptions as req_exc
 import urllib
 import urlparse
 
-from neutron.ddi.drivers.infoblox import exceptions as exc
+from neutron.ipam.drivers.infoblox import exceptions as exc
 from neutron.openstack.common import jsonutils
 from neutron.openstack.common import log as logging
 
@@ -111,31 +111,34 @@ class Infoblox(object):
         baseurl = urlparse.urljoin(self.wapi, urllib.quote(relative_path))
         return baseurl + query
 
-    def _validate_objtype_or_die(self, objtype):
+    def _validate_objtype_or_die(self, objtype, objtype_expected=True):
         if not objtype:
             raise ValueError('WAPI object type can\'t be empty.')
-        if '/' in objtype:
-            raise ValueError('WAPI object type can\'t contains slash.')
+        if objtype_expected and '/' in objtype:
+            raise ValueError('WAPI object type can\'t have slash.')
 
     @reraise_neutron_exception
-    def get_object(self, objtype, payload=None, return_fields=None,
+    def get_object(self, nios_object, payload=None, return_fields=None,
                    extattrs=None):
         """
-        Retrieve a list of Infoblox objects of type 'objtype'
+        Retrieve a list of Infoblox objects of NIOS object <nios_object>
         Args:
-            objtype  (str): Infoblox object type, e.g. 'network', 'range', etc.
+            nios_object (str): Infoblox object, e.g. 'network', 'range',
+                               or object reference.
             payload (dict): Payload with data to send
+            return_fields (list): List of fields to be returned
+            extattrs      (list): List of Extensible Attributes
         Returns:
-            A list of the Infoblox objects requested
+            Infoblox object requested
         Raises:
-            InfobloxObjectNotFound
+            InfobloxSearchError
         """
         if return_fields is None:
             return_fields = []
         if extattrs is None:
             extattrs = {}
 
-        self._validate_objtype_or_die(objtype)
+        self._validate_objtype_or_die(nios_object, objtype_expected=False)
 
         query_params = dict()
         if return_fields:
@@ -144,7 +147,7 @@ class Infoblox(object):
         headers = {'Content-type': 'application/json'}
 
         data = jsonutils.dumps(payload)
-        url = self._construct_url(objtype, query_params, extattrs)
+        url = self._construct_url(nios_object, query_params, extattrs)
 
         r = self.session.get(url,
                              data=data,
@@ -154,7 +157,7 @@ class Infoblox(object):
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxSearchError(
                 response=jsonutils.loads(r.content),
-                objtype=objtype,
+                objtype=nios_object,
                 content=r.content,
                 code=r.status_code)
 
@@ -165,12 +168,14 @@ class Infoblox(object):
         """
         Create an Infoblox object of type 'objtype'
         Args:
-            objtype  (str): Infoblox object type, e.g. 'network', 'range', etc.
-            payload (dict): Payload with data to send
+            objtype        (str): Infoblox object type,
+                                  e.g. 'network', 'range', etc.
+            payload       (dict): Payload with data to send
+            return_fields (list): List of fields to be returned
         Returns:
             The object reference of the newly create object
         Raises:
-            InfobloxException
+            InfobloxCannotCreateObject
         """
         if not return_fields:
             return_fields = []

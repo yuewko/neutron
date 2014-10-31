@@ -16,15 +16,14 @@
 from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
-from neutron.common import exceptions as neutron_exc
 from neutron.db.infoblox import infoblox_db
 from neutron.db.infoblox import models
-from neutron.ddi.drivers.infoblox import config
-from neutron.ddi.drivers.infoblox import dns_controller
-from neutron.ddi.drivers.infoblox import ea_manager
-from neutron.ddi.drivers.infoblox import exceptions
-from neutron.ddi.drivers.infoblox import tasks
-from neutron.ddi.drivers import neutron_ddi
+from neutron.ipam.drivers.infoblox import config
+from neutron.ipam.drivers.infoblox import dns_controller
+from neutron.ipam.drivers.infoblox import ea_manager
+from neutron.ipam.drivers.infoblox import exceptions
+from neutron.ipam.drivers.infoblox import tasks
+from neutron.ipam.drivers import neutron_ipam
 from neutron.extensions import external_net
 from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
@@ -33,8 +32,9 @@ from neutron.openstack.common import uuidutils
 OPTS = [
     neutron_conf.BoolOpt('use_host_records_for_ip_allocation',
                          default=True,
-                         help=_("Use host records for IP allocation. If False "
-                                "then Fixed IP + A + PTR record are used.")),
+                         help=_("Use host records for IP allocation. "
+                                "If False then Fixed IP + A + PTR record "
+                                "are used.")),
     neutron_conf.StrOpt('dhcp_relay_management_network_view',
                         default="default",
                         help=_("NIOS network view to be used for DHCP inside "
@@ -49,7 +49,7 @@ neutron_conf.CONF.register_opts(OPTS)
 LOG = logging.getLogger(__name__)
 
 
-class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
+class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
     def __init__(self, obj_manip=None, config_finder=None, ip_allocator=None,
                  extattr_manager=None, ib_db=None):
         """IPAM backend implementation for Infoblox."""
@@ -263,7 +263,7 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
                     netview=networkview_name, cidr=subnet['cidr'])
 
         # TODO(max_lobur): As kind of optimisation we could mark IP as used by
-        # neutron_ddi._allocate_specific_ip, to prevent poking already empty
+        # neutron_ipam._allocate_specific_ip, to prevent poking already empty
         # ranges.
         LOG.debug('IP address allocated on Infoblox NIOS: %s', allocated_ip)
 
@@ -291,7 +291,7 @@ class InfobloxIPAMController(neutron_ddi.NeutronIPAMController):
                 continue
             if not net.has_dns_members():
                 LOG.debug("No domain-name-servers option found, it will"
-                          "not be updated to the private DDI relay IP.")
+                          "not be updated to the private IPAM relay IP.")
                 continue
             if cfg.require_dhcp_relay:
                 net.update_member_ip_in_dns_nameservers(ip['ip_address'])

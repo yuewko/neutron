@@ -207,9 +207,9 @@ class IPAMController(BackendController):
         pass
 
 
-class DDI(BackendController):
+class IPAM(BackendController):
     def __init__(self):
-        # These should be initialized in derived DDI class
+        # These should be initialized in derived IPAM class
         self.dns_controller = None
         self.ipam_controller = None
         self.dhcp_controller = None
@@ -294,7 +294,7 @@ class DDI(BackendController):
             backend_subnet,
             host,
             ip.get('ip_address', None))
-        LOG.debug('DDI allocate IP: %s' % ip_address)
+        LOG.debug('IPAM allocate IP: %s' % ip_address)
         mac_address = host['mac_address']
         self.dhcp_controller.bind_mac(
             context,

@@ -16,7 +16,7 @@ import operator
 
 from taskflow import task
 
-from neutron.ddi.drivers.infoblox import exceptions
+from neutron.ipam.drivers.infoblox import exceptions
 
 
 class CreateNetViewTask(task.Task):
@@ -45,7 +45,7 @@ class CreateNetworkTask(task.Task):
 
 class ChainInfobloxNetworkTask(task.Task):
     def execute(self, obj_manip, net_view_name, cidr, network_extattrs):
-        ea_names = ['os_network_is_external', 'os_network_is_shared']
+        ea_names = ['Is External', 'Is Shared']
 
         eas = operator.itemgetter(*ea_names)(network_extattrs)
         shared_or_external = any(eval(ea['value']) for ea in eas)

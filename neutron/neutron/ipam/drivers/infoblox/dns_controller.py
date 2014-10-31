@@ -17,13 +17,13 @@ from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
 from neutron.db.infoblox import infoblox_db as infoblox_db
-from neutron.ddi.drivers.infoblox import config
-from neutron.ddi.drivers.infoblox import connector
-from neutron.ddi.drivers.infoblox import constants as ib_constants
-from neutron.ddi.drivers.infoblox import ea_manager
-from neutron.ddi.drivers.infoblox import object_manipulator
-from neutron.ddi.drivers.infoblox import tasks
-from neutron.ddi.drivers import neutron_ddi
+from neutron.ipam.drivers.infoblox import config
+from neutron.ipam.drivers.infoblox import connector
+from neutron.ipam.drivers.infoblox import constants as ib_constants
+from neutron.ipam.drivers.infoblox import ea_manager
+from neutron.ipam.drivers.infoblox import object_manipulator
+from neutron.ipam.drivers.infoblox import tasks
+from neutron.ipam.drivers import neutron_ipam
 from neutron.openstack.common import log as logging
 
 OPTS = [
@@ -60,7 +60,7 @@ LOG = logging.getLogger(__name__)
 neutron_conf.CONF.register_opts(OPTS)
 
 
-class InfobloxDNSController(neutron_ddi.NeutronDNSController):
+class InfobloxDNSController(neutron_ipam.NeutronDNSController):
 
     SUBDOMAIN_NAME_LEN = 8
 
@@ -78,7 +78,6 @@ class InfobloxDNSController(neutron_ddi.NeutronDNSController):
         self.pattern_builder = config.PatternBuilder
 
     def _get_hostname_pattern(self, port, cfg):
-
         port_owner = port['device_owner']
         if (port_owner
                 in ib_constants.NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP.keys()):

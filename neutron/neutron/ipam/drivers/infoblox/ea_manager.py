@@ -16,24 +16,18 @@
 from oslo.config import cfg
 
 from neutron.db import models_v2, db_base_plugin_v2
-from neutron.ddi.drivers.infoblox import connector
-from neutron.ddi.drivers.infoblox import constants as ib_constants
-from neutron.ddi.drivers.infoblox import exceptions
+from neutron.ipam.drivers.infoblox import connector
+from neutron.ipam.drivers.infoblox import constants as ib_constants
+from neutron.ipam.drivers.infoblox import exceptions
 from neutron.openstack.common import log as logging
 
-OPTS = [
-    cfg.BoolOpt('use_host_records_for_ip_allocation',
-                default=True,
-                help=_("Use host records for IP allocation. If False "
-                       "then Fixed IP + A + PTR record are used."))
-]
 
 LOG = logging.getLogger(__name__)
 
 
 class InfobloxEaManager(object):
     # CMP == cloud management platform
-    OPENSTACK_OBJECT_FLAG = 'cmp_type'
+    OPENSTACK_OBJECT_FLAG = 'CMP Type'
 
     def __init__(self, infoblox_db):
         # Passing this thru constructor to avoid cyclic imports
@@ -73,19 +67,19 @@ class InfobloxEaManager(object):
                         context.get('tenant_id'))
         os_user_id = context.user_id
 
-        attributes = dict(
-            os_subnet_id=os_subnet_id,
-            os_subnet_name=os_subnet_name,
-            os_network_id=os_network_id,
-            os_network_name=os_network_name,
-            os_network_is_external=os_network_is_external,
-            os_network_is_shared=os_network_is_shared,
-            os_network_type=os_network_type,
-            os_segmentation_id=os_segmentation_id,
-            os_physical_network=os_physical_network,
-            os_tenant_id=os_tenant_id,
-            os_user_id=os_user_id,
-        )
+        attributes = {
+            'Subnet ID': os_subnet_id,
+            'Subnet Name': os_subnet_name,
+            'Network ID': os_network_id,
+            'Network Name': os_network_name,
+            'Is External': os_network_is_external,
+            'Is Shared': os_network_is_shared,
+            'Network Encap': os_network_type,
+            'Segmentation ID': os_segmentation_id,
+            'Physical Network Name': os_physical_network,
+            'Tenant ID': os_tenant_id,
+            'Account': os_user_id,
+        }
 
         return self._build_extattrs(attributes)
 
@@ -105,12 +99,17 @@ class InfobloxEaManager(object):
             os_instance_id = None
 
         attributes = {
-            'os_tenant_id': os_tenant_id,
-            'os_user_id': os_user_id,
-            'os_port_id': port['id']
+            'Tenant ID': os_tenant_id,
+            'Account': os_user_id,
+            'Port ID': port['id']
         }
         if os_instance_id:
-            attributes['os_instance_id'] = os_instance_id
+            attributes['VM ID'] = os_instance_id
+
+        if self.db.is_network_external(context, port['network_id']):
+            attributes['IP Type'] = 'floating'
+        else:
+            attributes['IP Type'] = 'fixed'
 
         return self._build_extattrs(attributes)
 
@@ -201,13 +200,13 @@ def _extattrs_result_filter_hook(query, filters, db_model,
 
 def subnet_extattrs_result_filter_hook(query, filters):
     return _extattrs_result_filter_hook(
-        query, filters, models_v2.Subnet, 'subnet', 'network', 'os_subnet_id')
+        query, filters, models_v2.Subnet, 'subnet', 'network', 'Subnet ID')
 
 
 def network_extattrs_result_filter_hook(query, filters):
     return _extattrs_result_filter_hook(
         query, filters, models_v2.Network, 'subnet', 'network',
-        'os_network_id')
+        'Network ID')
 
 
 def port_extattrs_result_filter_hook(query, filters):
@@ -216,11 +215,11 @@ def port_extattrs_result_filter_hook(query, filters):
     else:
         ib_objtype = 'record:a'
     return _extattrs_result_filter_hook(
-        query, filters, models_v2.Port, 'port', ib_objtype, 'os_port_id')
+        query, filters, models_v2.Port, 'port', ib_objtype, 'Port ID')
 
 
-if cfg.CONF.ddi_driver == 'neutron.ddi.drivers.infoblox'\
-                          '.infoblox_ddi.InfobloxDDI':
+if cfg.CONF.ipam_driver == 'neutron.ipam.drivers.infoblox'\
+                          '.infoblox_ipam.InfobloxIPAM':
     db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
         models_v2.Subnet, 'subnet_extattrs', None, None,
         subnet_extattrs_result_filter_hook)

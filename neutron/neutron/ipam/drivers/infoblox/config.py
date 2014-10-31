@@ -22,8 +22,8 @@ from oslo.config import cfg as neutron_conf
 
 from neutron.db.infoblox import infoblox_db as ib_db
 from neutron.db.infoblox import models as ib_models
-from neutron.ddi.drivers.infoblox import exceptions
-from neutron.ddi.drivers.infoblox import objects
+from neutron.ipam.drivers.infoblox import exceptions
+from neutron.ipam.drivers.infoblox import objects
 
 LOG = logging.getLogger(__name__)
 OPTS = [

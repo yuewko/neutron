@@ -31,7 +31,6 @@ from neutron.db import api as db
 from neutron.db import common_db_mixin
 from neutron.db import models_v2
 from neutron.db import sqlalchemyutils
-from neutron.extensions import external_net
 from neutron.extensions import l3
 from neutron import manager
 from neutron import neutron_plugin_base_v2
@@ -88,11 +87,11 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
     @property
     def _recycle_ip(self):
-        return self.ddi.ipam_controller._recycle_ip
+        return self.ipam.ipam_controller._recycle_ip
 
     @property
-    def ddi(self):
-        return manager.NeutronManager.get_ddi()
+    def ipam(self):
+        return manager.NeutronManager.get_ipam()
 
     @classmethod
     def register_dict_extend_funcs(cls, resource, funcs):
@@ -116,7 +115,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         return network
 
     def _get_subnet(self, context, subnet_id):
-        return self.ddi.get_subnet_by_id(context, subnet_id)
+        return self.ipam.get_subnet_by_id(context, subnet_id)
 
     def _get_port(self, context, id):
         try:
@@ -130,12 +129,12 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         return route_qry.filter_by(subnet_id=subnet_id).all()
 
     def _get_subnets_by_network(self, context, network_id):
-        return self.ddi.get_subnets_by_network(context, network_id)
+        return self.ipam.get_subnets_by_network(context, network_id)
 
     def _get_all_subnets(self, context):
         # NOTE(salvatore-orlando): This query might end up putting
         # a lot of stress on the db. Consider adding a cache layer
-        return self.ddi.get_all_subnets(context)
+        return self.ipam.get_all_subnets(context)
 
     @staticmethod
     def _generate_mac(context, network_id):
@@ -343,7 +342,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
         :raises: InvalidInput, IpAddressInUse
 
-        TODO(zasimov): refactor this function. Move into DDI!
+        TODO(zasimov): refactor this function. Move into IPAM!
         """
         fixed_ip_set = []
         for fixed in fixed_ips:
@@ -414,7 +413,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             ip_address = fixed.get('ip_address', None)
             ip = dict(subnet_id=subnet_id,
                       ip_address=ip_address)
-            ip_address = self.ddi.allocate_ip(context, port, ip)
+            ip_address = self.ipam.allocate_ip(context, port, ip)
             if ip_address:
                 ip['ip_address'] = ip_address
                 ips.append(ip)
@@ -482,7 +481,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         else:
             # Get subnets for network
             # subnets = self.get_subnets(context, filters=filter)
-            subnets = self.ddi.get_subnets_by_network(context, p['network_id'])
+            subnets = self.ipam.get_subnets_by_network(context, p['network_id'])
 
             # Split into v4 and v6 subnets
             v4 = []
@@ -808,7 +807,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                     'status': n.get('status', constants.NET_STATUS_ACTIVE)}
             network = models_v2.Network(**args)
             context.session.add(network)
-            self.ddi.create_network(context, network)
+            self.ipam.create_network(context, network)
         return self._make_network_dict(network, process_extensions=False)
 
     def update_network(self, context, id, network):
@@ -820,11 +819,11 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                 self._validate_shared_update(context, id, network, n)
             network.update(n)
             # also update shared in all the subnets for this network
-            # FIXME(zasimov): move into ddi
+            # FIXME(zasimov): move into IPAM
             subnets = self._get_subnets_by_network(context, id)
             for subnet in subnets:
                 subnet['shared'] = network['shared']
-                self.ddi.update_subnet(context, subnet['id'], subnet)
+                self.ipam.update_subnet(context, subnet['id'], subnet)
         return self._make_network_dict(network)
 
     def delete_network(self, context, id):
@@ -850,7 +849,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                 self._delete_port(context, port['id'])
 
             # clean up subnets
-            self.ddi.delete_network(context, id)
+            self.ipam.delete_network(context, id)
 
             # and delete network
             subnets_qry = context.session.query(models_v2.Subnet)
@@ -874,7 +873,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                                     page_reverse=page_reverse)
 
         for net in nets:
-            net.update(self.ddi.get_additional_network_dict_params(context,
+            net.update(self.ipam.get_additional_network_dict_params(context,
                 net['id']))
 
         return nets
@@ -995,7 +994,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             network = self._get_network(context, s["network_id"])
             self._validate_subnet_cidr(context, network, s['cidr'])
 
-            subnet = self.ddi.create_subnet(context, s)
+            subnet = self.ipam.create_subnet(context, s)
             # context.session.add(subnet)
 
         LOG.info('create_subnet DONE %s' % subnet.id)
@@ -1025,7 +1024,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                                 for p in db_subnet.allocation_pools]
             self._validate_gw_out_of_pools(s["gateway_ip"], allocation_pools)
 
-        subnet, dhcp_changes = self.ddi.update_subnet(context, id, s)
+        subnet, dhcp_changes = self.ipam.update_subnet(context, id, s)
 
         result = self._make_subnet_dict(subnet)
         # Keep up with fields that changed
@@ -1038,7 +1037,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
     def delete_subnet(self, context, id):
         LOG.info('delete_subnet %s' % id)
         with context.session.begin(subtransactions=True):
-            result = self.ddi.delete_subnet(context, id)
+            result = self.ipam.delete_subnet(context, id)
             return result
 
     def get_subnet(self, context, id, fields=None):
@@ -1048,11 +1047,11 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
     def get_subnets(self, context, filters=None, fields=None,
                     sorts=None, limit=None, marker=None,
                     page_reverse=False):
-        return self.ddi.get_subnets(context, filters, fields, sorts,
+        return self.ipam.get_subnets(context, filters, fields, sorts,
                                     limit, marker, page_reverse)
 
     def get_subnets_count(self, context, filters=None):
-        return self.ddi.get_subnets_count(context, filters)
+        return self.ipam.get_subnets_count(context, filters)
 
     def create_port_bulk(self, context, ports):
         return self._create_bulk('port', context, ports)
@@ -1110,7 +1109,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                                   device_owner=p['device_owner'])
             context.session.add(port)
 
-            # TODO(zasimov): Move into DDI?
+            # TODO(zasimov): Move into IPAM?
             # Update the allocated IP's
             if ips:
                 for ip in ips:
@@ -1132,12 +1131,12 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
             port_dict = self._make_port_dict(port, process_extensions=False)
 
-            if cfg.CONF.ddi_driver == 'neutron.ddi.drivers.infoblox.'\
-                                      'infoblox_ddi.InfobloxDDI':
+            if cfg.CONF.ipam_driver == 'neutron.ipam.drivers.infoblox.'\
+                                       'infoblox_ipam.InfobloxIPAM':
                 port_dict['tenant_name'] = p.get('tenant_name', None)
 
             port_dict['fixed_ips'] = ips
-            self.ddi.create_port(context, port_dict)
+            self.ipam.create_port(context, port_dict)
             context.session.add(port)
 
             return port_dict
@@ -1187,7 +1186,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         # Keep up with fields that changed
         if changed_ips:
             result['fixed_ips'] = prev_ips + added_ips
-        self.ddi.update_port(context, result)
+        self.ipam.update_port(context, result)
         return result
 
     def delete_port(self, context, id):
@@ -1216,7 +1215,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         if not context.is_admin:
             query = query.filter_by(tenant_id=context.tenant_id)
         port = query.with_lockmode('update').one()
-        self.ddi.delete_port(context, port)
+        self.ipam.delete_port(context, port)
 
         allocated_qry = context.session.query(
             models_v2.IPAllocation).with_lockmode('update')
@@ -1225,7 +1224,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         for a in allocated:
             ip = dict(subnet_id=a['subnet_id'],
                       ip_address=a['ip_address'])
-            self.ddi.deallocate_ip(context, port, ip)
+            self.ipam.deallocate_ip(context, port, ip)
 
         context.session.delete(port)
 

@@ -21,7 +21,7 @@ import mock
 from oslo.config import cfg
 
 from neutron.agent.common import config
-from neutron.agent.linux.ddi_proxy import OPTS as DDI_OPTS
+from neutron.agent.linux.dhcp_relay import OPTS as IPAM_OPTS
 from neutron.agent.linux import dhcp
 from neutron.common import config as base_config
 from neutron.common import constants
@@ -396,7 +396,7 @@ class TestBase(base.BaseTestCase):
         self.conf = config.setup_conf()
         self.conf.register_opts(base_config.core_opts)
         self.conf.register_opts(dhcp.OPTS)
-        self.conf.register_opts(DDI_OPTS)
+        self.conf.register_opts(IPAM_OPTS)
         config.register_interface_driver_opts_helper(self.conf)
         instance = mock.patch("neutron.agent.linux.dhcp.DeviceManager")
         self.mock_mgr = instance.start()

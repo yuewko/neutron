@@ -13,8 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.ddi.drivers.infoblox import exceptions as exc
-from neutron.ddi.drivers.infoblox import objects
+from neutron.ipam.drivers.infoblox import exceptions as exc
+from neutron.ipam.drivers.infoblox import objects
 from neutron.openstack.common import log as logging
 
 
@@ -56,6 +56,7 @@ class InfobloxObjectManipulator(object):
             dhcp_options.append({'name': 'routers',
                                  'value': gateway_ip})
 
+        LOG.error(dhcp_trel_ip)
         if dhcp_trel_ip:
             dhcp_options.append({'name': 'dhcp-server-identifier',
                                          'num': 54,
@@ -63,6 +64,7 @@ class InfobloxObjectManipulator(object):
 
         if dhcp_options:
             network_data['options'] = dhcp_options
+        LOG.error(network_data)
 
         return self._create_infoblox_object(
             'network', network_data, check_if_exists=False)
@@ -145,16 +147,19 @@ class InfobloxObjectManipulator(object):
         fa_data = {'network_view': network_view,
                    'ipv4addr': ip}
         fa = self._get_infoblox_object_or_none('fixedaddress', fa_data)
-        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
+        if fa:
+            self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
     def update_dns_record_eas(self, dns_view, ip, extattrs):
         fa_data = {'view': dns_view,
                    'ipv4addr': ip}
         fa = self._get_infoblox_object_or_none('record:a', fa_data)
-        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
+        if fa:
+            self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
         fa = self._get_infoblox_object_or_none('record:ptr', fa_data)
-        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
+        if fa:
+            self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
     def create_fixed_address_from_cidr(self, network_view, mac, cidr):
         fa = objects.FixedAddress()
@@ -253,40 +258,84 @@ class InfobloxObjectManipulator(object):
         update_kwargs = {'name': name}
         self._update_infoblox_object('record:host', record_host, update_kwargs)
 
-    def bind_name_with_record_a(self, dnsview_name, ip, name):
+    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list):
         # Forward mapping
-        payload = {
-            'name': name,
-            'view': dnsview_name
-        }
-        additional_create_kwargs = {'ipv4addr': ip}
-        self._create_infoblox_object('record:a', payload,
-                                     additional_create_kwargs,
-                                     check_if_exists=True)
+        if 'record:a' in bind_list:
+            payload = {
+                'name': name,
+                'view': dnsview_name
+            }
+            additional_create_kwargs = {'ipv4addr': ip}
+            self._create_infoblox_object('record:a', payload,
+                                         additional_create_kwargs,
+                                         check_if_exists=True)
 
-        # Reverse mapping
-        record_ptr_data = {
-            'ptrdname': name,
-            'view': dnsview_name
-        }
-        additional_create_kwargs = {'ipv4addr': ip}
-        self._create_infoblox_object('record:ptr', record_ptr_data,
-                                     additional_create_kwargs,
-                                     check_if_exists=True)
+            # Reverse mapping
+        if 'record:ptr' in bind_list:
+            record_ptr_data = {
+                'ptrdname': name,
+                'view': dnsview_name
+            }
+            additional_create_kwargs = {'ipv4addr': ip}
+            self._create_infoblox_object('record:ptr', record_ptr_data,
+                                         additional_create_kwargs,
+                                         check_if_exists=True)
 
-    def unbind_name_from_record_a(self, dnsview_name, ip, name):
-        dns_record_a = {
-            'name': name,
-            'ipv4addr': ip,
-            'view': dnsview_name
+    def get_all_associated_objects(self, net_view_name, ip):
+        assoc_with_ip = {
+            'network_view': net_view_name,
+            'ip_address': ip
         }
-        self._delete_infoblox_object('record:a', dns_record_a)
+        assoc_objects = self._get_infoblox_object_or_none(
+            'ipv4address', assoc_with_ip, return_fields=['objects'])
+        if assoc_objects:
+            return assoc_objects['objects']
 
-        dns_record_ptr = {
-            'ptrdname': name,
-            'view': dnsview_name,
-        }
-        self._delete_infoblox_object('record:ptr', dns_record_ptr)
+        return []
+
+    def get_object_refs_associated_with_a_record(self, a_record_ref):
+        associated_with_a_record = [  # {object_type, search_field}
+            {'type': 'record:cname', 'search': 'canonical'},
+            {'type': 'record:txt', 'search': 'name'}]
+        obj_refs = []
+        a_record = self.connector.get_object(a_record_ref)
+        for rec_inf in associated_with_a_record:
+            objs = self.connector.get_object(
+                rec_inf['type'], {'view': a_record['view'],
+                                  rec_inf['search']: a_record['name']})
+            if objs:
+                for obj in objs:
+                    obj_refs.append(obj['_ref'])
+
+        return obj_refs
+
+    def delete_all_associated_objects(self, net_view_name, ip, delete_list):
+        del_objs = []
+        obj_refs = self.get_all_associated_objects(net_view_name, ip)
+        for obj_ref in obj_refs:
+            del_objs.append(obj_ref)
+            if self._get_object_type_from_ref(obj_ref) == 'record:a':
+                del_objs.extend(
+                    self.get_object_refs_associated_with_a_record(obj_ref))
+        for obj_ref in del_objs:
+            if self._get_object_type_from_ref(obj_ref) in delete_list:
+                self.connector.delete_object(obj_ref)
+
+    def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
+        if 'record:a' in unbind_list:
+            dns_record_a = {
+                'name': name,
+                'ipv4addr': ip,
+                'view': dnsview_name
+            }
+            self._delete_infoblox_object('record:a', dns_record_a)
+
+        if 'record:ptr' in unbind_list:
+            dns_record_ptr = {
+                'ptrdname': name,
+                'view': dnsview_name,
+            }
+            self._delete_infoblox_object('record:ptr', dns_record_ptr)
 
     def create_dns_zone(self, dns_view, dns_zone_fqdn, primary_dns_member=None,
                         secondary_dns_members=None, zone_format=None,
@@ -438,3 +487,7 @@ class InfobloxObjectManipulator(object):
         if ib_object_ref:
             self.connector.delete_object(ib_object_ref)
             LOG.info(_('Infoblox object was deleted: %s'), ib_object_ref)
+
+    @staticmethod
+    def _get_object_type_from_ref(ref):
+        return ref.split('/', 1)[0]

@@ -754,10 +754,15 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
             try:
                 fip_qry = context.session.query(FloatingIP)
                 floating_ip = fip_qry.filter_by(fixed_port_id=port_id).one()
+
+                ipam = manager.NeutronManager.get_ipam()
+                ipam.disassociate_floatingip(context, floating_ip, port_id)
+
                 router_id = floating_ip['router_id']
                 floating_ip.update({'fixed_port_id': None,
                                     'fixed_ip_address': None,
                                     'router_id': None})
+
             except exc.NoResultFound:
                 return
             except exc.MultipleResultsFound:

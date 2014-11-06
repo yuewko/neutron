@@ -106,6 +106,7 @@ class HostRecordIPAllocator(IPAllocator):
 
     def update_extattrs(self, network_view, dns_view, ip, extattrs):
         self.infoblox.update_host_record_eas(dns_view, ip, extattrs)
+        self.infoblox.update_dns_record_eas(dns_view, ip, extattrs)
 
 
 class FixedAddressIPAllocator(IPAllocator):

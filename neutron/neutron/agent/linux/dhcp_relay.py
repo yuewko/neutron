@@ -338,7 +338,8 @@ class DnsDhcpProxyDeviceManager(dhcp.DeviceManager):
                              bridge=relay_bridge)
 
             use_static_ip_allocation = (
-                self.conf.dhcp_relay_management_network is not None)
+                self.conf.dhcp_relay_management_network is not None
+                and hasattr(network, 'mgmt_iface_ip'))
 
             if use_static_ip_allocation:
                 self._allocate_static_ip(network, iface_name)

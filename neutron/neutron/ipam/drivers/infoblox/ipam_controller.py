@@ -113,7 +113,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                                 context,
                                 subnet['network_id'])}
 
-        if not cfg.is_external and cfg.require_dhcp_relay:
+        if cfg.require_dhcp_relay:
             for member in dhcp_members:
                 dhcp_member = models.InfobloxDHCPMember(
                     server_ip=member.ip,
@@ -206,7 +206,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
 
         if self.ib_db.is_last_subnet(context, subnet['id']):
             cfg.member_manager.release_member(context, cfg.network_view)
-            if not cfg.is_external and cfg.require_dhcp_relay:
+            if cfg.require_dhcp_relay:
                 member = context.session.query(models.InfobloxDNSMember)
                 member.filter_by(network_id=network.id).delete()
 
@@ -298,12 +298,6 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             self.infoblox.update_network_options(net)
 
     def create_network(self, context, network):
-        # external networks should not have static IP allocated
-        is_external = network.get(external_net.EXTERNAL, False)
-
-        if is_external:
-            return network
-
         if neutron_conf.CONF.dhcp_relay_management_network is None:
             LOG.info(_('dhcp_relay_management_network option is not set in '
                        'config. DHCP will be used for management network '
@@ -334,13 +328,13 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
 
         if not self.infoblox.has_networks(net_view):
             self.infoblox.delete_network_view(net_view)
-        if not self.ib_db.is_network_external(context, network_id):
-            fixed_address_ref = self.ib_db.get_management_ip_ref(context,
-                                                                 network_id)
 
-            if fixed_address_ref is not None:
-                self.infoblox.delete_object_by_ref(fixed_address_ref)
-                self.ib_db.delete_management_ip(context, network_id)
+        fixed_address_ref = self.ib_db.get_management_ip_ref(context,
+                                                             network_id)
+
+        if fixed_address_ref is not None:
+            self.infoblox.delete_object_by_ref(fixed_address_ref)
+            self.ib_db.delete_management_ip(context, network_id)
 
     def restart_services(self, context, members=None, subnet=None):
         if not members:

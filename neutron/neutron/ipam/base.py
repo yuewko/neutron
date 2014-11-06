@@ -359,7 +359,15 @@ class IPAM(BackendController):
 
     def update_floatingip(self, context, floatingip, port):
         associate = floatingip['floatingip'] is not None
+
+        if not port['tenant_id']:
+            port['tenant_id'] = floatingip['floatingip']['tenant_id']
+
         if associate:
             self.create_port(context, port)
         else:
             self.delete_port(context, port)
+
+    def disassociate_floatingip(self, context, ip_address, port_id):
+        self.dns_controller.disassociate_floatingip(
+            context, ip_address, port_id)

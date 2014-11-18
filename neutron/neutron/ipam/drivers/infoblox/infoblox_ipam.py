@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from neutron.agent.linux import dhcp_relay
 from neutron.db.infoblox import models
 from neutron.ipam.drivers.infoblox import config
 from neutron.ipam.drivers.infoblox import connector
@@ -90,5 +91,5 @@ class InfobloxIPAM(neutron_ipam.NeutronIPAM):
         return {
             'external_dns_servers': dns_list,
             'external_dhcp_servers': dhcp_list,
-            'infoblox_mgmt_iface_ip': ib_mgmt_ip
+            dhcp_relay.MGMT_INTERFACE_IP_ATTR: ib_mgmt_ip
         }

@@ -17,6 +17,7 @@ import abc
 
 from oslo.config import cfg
 
+from neutron.ipam.drivers.infoblox import objects
 from neutron.openstack.common import log as logging
 
 
@@ -81,7 +82,8 @@ class IPAllocator(object):
 
 class HostRecordIPAllocator(IPAllocator):
     def bind_names(self, dnsview_name, ip, name):
-        self.infoblox.bind_name_with_host_record(dnsview_name, ip, name)
+        # do nothing on bind, since this is tracked on host record creation
+        pass
 
     def unbind_names(self, dnsview_name, ip, name):
         # Nothing to delete, all will be deleted together with host record.
@@ -90,19 +92,39 @@ class HostRecordIPAllocator(IPAllocator):
     def allocate_ip_from_range(self, dnsview_name, networkview_name, zone_auth,
                                hostname, mac, first_ip, last_ip,
                                extattrs=None):
-        hr = self.infoblox.create_host_record_from_range(
-            dnsview_name, networkview_name, zone_auth, hostname, mac,
-            first_ip, last_ip)
-        return hr.ip
+        fqdn = '.'.join([hostname, zone_auth])
+        host_record = self.infoblox.find_hostname(dnsview_name, fqdn)
+        if host_record:
+            next_available_ip = objects.IPAllocationObject.\
+                next_available_ip_from_range
+            next_available = next_available_ip(networkview_name,
+                                               first_ip, last_ip)
+            hr = self.infoblox.add_ip_to_record(host_record,
+                                                next_available, mac)
+        else:
+            hr = self.infoblox.create_host_record_from_range(
+                dnsview_name, networkview_name, zone_auth, hostname, mac,
+                first_ip, last_ip)
+        return hr.ips[-1].ip
 
     def allocate_given_ip(self, netview_name, dnsview_name, zone_auth,
                           hostname, mac, ip, extattrs=None):
-        hr = self.infoblox.create_host_record_for_given_ip(
-            dnsview_name, zone_auth, hostname, mac, ip)
-        return hr.ip
+        fqdn = '.'.join([hostname, zone_auth])
+        host_record = self.infoblox.find_hostname(dnsview_name, fqdn)
+        if host_record:
+            hr = self.infoblox.add_ip_to_record(host_record, ip, mac)
+        else:
+            hr = self.infoblox.create_host_record_for_given_ip(
+                dnsview_name, zone_auth, hostname, mac, ip)
+        return hr.ips[-1].ip
 
     def deallocate_ip(self, network_view, dns_view_name, ip):
-        self.infoblox.delete_host_record(dns_view_name, ip)
+        host_record = self.infoblox.get_host_record(dns_view_name, ip)
+
+        if len(host_record.ips) > 1:
+            self.infoblox.delete_ip_from_host_record(host_record, ip)
+        else:
+            self.infoblox.delete_host_record(dns_view_name, ip)
 
     def update_extattrs(self, network_view, dns_view, ip, extattrs):
         self.infoblox.update_host_record_eas(dns_view, ip, extattrs)

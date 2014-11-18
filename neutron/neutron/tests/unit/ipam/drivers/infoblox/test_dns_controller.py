@@ -84,22 +84,22 @@ class DnsControllerTestCase(base.BaseTestCase):
 
     def test_get_hostname_pattern_dhcp_port(self):
         port = {'device_owner': neutron_constants.DEVICE_OWNER_DHCP}
-        result = self.dns_ctrlr._get_hostname_pattern(port, mock.Mock())
+        result = self.dns_ctrlr.get_hostname_pattern(port, mock.Mock())
         self.assertEqual('dhcp-port-{ip_address}', result)
 
     def test_get_hostname_pattern_router_iface(self):
         port = {'device_owner': neutron_constants.DEVICE_OWNER_ROUTER_INTF}
-        result = self.dns_ctrlr._get_hostname_pattern(port, mock.Mock())
+        result = self.dns_ctrlr.get_hostname_pattern(port, mock.Mock())
         self.assertEqual('router-iface-{ip_address}', result)
 
     def test_get_hostname_pattern_router_gw(self):
         port = {'device_owner': neutron_constants.DEVICE_OWNER_ROUTER_GW}
-        result = self.dns_ctrlr._get_hostname_pattern(port, mock.Mock())
+        result = self.dns_ctrlr.get_hostname_pattern(port, mock.Mock())
         self.assertEqual('router-gw-{ip_address}', result)
 
     def test_get_hostname_pattern_lb_vip(self):
         port = {'device_owner': 'neutron:' + plugins_constants.LOADBALANCER}
-        result = self.dns_ctrlr._get_hostname_pattern(port, mock.Mock())
+        result = self.dns_ctrlr.get_hostname_pattern(port, mock.Mock())
         self.assertEqual('lb-vip-{ip_address}', result)
 
     def test_get_hostname_pattern_instance_port(self):
@@ -107,7 +107,7 @@ class DnsControllerTestCase(base.BaseTestCase):
         cfg_mock = mock.MagicMock()
         cfg_mock.hostname_pattern = 'host-{ip_address}'
 
-        result = self.dns_ctrlr._get_hostname_pattern(port, cfg_mock)
+        result = self.dns_ctrlr.get_hostname_pattern(port, cfg_mock)
         self.assertEqual('host-{ip_address}', result)
 
 

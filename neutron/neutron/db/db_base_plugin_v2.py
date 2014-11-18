@@ -480,8 +480,8 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             ips = self._allocate_fixed_ips(context, p, configured_ips)
         else:
             # Get subnets for network
-            # subnets = self.get_subnets(context, filters=filter)
-            subnets = self.ipam.get_subnets_by_network(context, p['network_id'])
+            subnets = self.ipam.get_subnets_by_network(context,
+                                                       p['network_id'])
 
             # Split into v4 and v6 subnets
             v4 = []
@@ -873,8 +873,9 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                                     page_reverse=page_reverse)
 
         for net in nets:
-            net.update(self.ipam.get_additional_network_dict_params(context,
-                net['id']))
+            net.update(
+                self.ipam.get_additional_network_dict_params(
+                    context, net['id']))
 
         return nets
 
@@ -1048,7 +1049,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                     sorts=None, limit=None, marker=None,
                     page_reverse=False):
         return self.ipam.get_subnets(context, filters, fields, sorts,
-                                    limit, marker, page_reverse)
+                                     limit, marker, page_reverse)
 
     def get_subnets_count(self, context, filters=None):
         return self.ipam.get_subnets_count(context, filters)

@@ -15,7 +15,9 @@
 
 from oslo.config import cfg
 
-from neutron.db import models_v2, db_base_plugin_v2
+from neutron.db import db_base_plugin_v2
+from neutron.db import l3_db
+from neutron.db import models_v2
 from neutron.ipam.drivers.infoblox import connector
 from neutron.ipam.drivers.infoblox import constants as ib_constants
 from neutron.ipam.drivers.infoblox import exceptions
@@ -114,9 +116,9 @@ class InfobloxEaManager(object):
         return self._build_extattrs(attributes)
 
     def _get_instance_id(self, context, port):
-        network_is_external = self.db.is_network_external(
-            context, port['network_id'])
-        if network_is_external:
+        is_floatingip = port['device_owner'] == l3_db.DEVICE_OWNER_FLOATINGIP
+
+        if is_floatingip:
             os_instance_id = self.db.get_instance_id_by_floating_ip(
                 context, floating_ip_id=port['device_id'])
         else:
@@ -219,7 +221,7 @@ def port_extattrs_result_filter_hook(query, filters):
 
 
 if cfg.CONF.ipam_driver == 'neutron.ipam.drivers.infoblox'\
-                          '.infoblox_ipam.InfobloxIPAM':
+                           '.infoblox_ipam.InfobloxIPAM':
     db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
         models_v2.Subnet, 'subnet_extattrs', None, None,
         subnet_extattrs_result_filter_hook)

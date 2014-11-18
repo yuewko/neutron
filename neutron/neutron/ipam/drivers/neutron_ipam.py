@@ -523,12 +523,12 @@ class NeutronIPAM(base.IPAM):
     def update_subnet(self, context, subnet_id, subnet):
         with context.session.begin(subtransactions=True):
             return super(NeutronIPAM, self).update_subnet(context, subnet_id,
-                                                         subnet)
+                                                          subnet)
 
     def get_subnets_by_network(self, context, network_id):
         with context.session.begin(subtransactions=True):
             return super(NeutronIPAM, self).get_subnets_by_network(context,
-                                                                  network_id)
+                                                                   network_id)
 
     def get_all_subnets(self, context):
         with context.session.begin(subtransactions=True):
@@ -539,8 +539,8 @@ class NeutronIPAM(base.IPAM):
                     page_reverse=False):
         with context.session.begin(subtransactions=True):
             return super(NeutronIPAM, self).get_subnets(context, filters,
-                                                       fields, sorts, limit,
-                                                       marker, page_reverse)
+                                                        fields, sorts, limit,
+                                                        marker, page_reverse)
 
     def get_subnets_count(self, context, filters=None):
         with context.session.begin(subtransactions=True):
@@ -548,7 +548,8 @@ class NeutronIPAM(base.IPAM):
 
     def get_subnet_by_id(self, context, subnet_id):
         with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).get_subnet_by_id(context, subnet_id)
+            return super(NeutronIPAM, self).get_subnet_by_id(context,
+                                                             subnet_id)
 
     def allocate_ip(self, context, host, ip):
         with context.session.begin(subtransactions=True):

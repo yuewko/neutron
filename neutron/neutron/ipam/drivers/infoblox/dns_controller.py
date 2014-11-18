@@ -93,7 +93,8 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
                                                 ip_address.floating_ip_address,
                                                 extattrs)
 
-    def _get_hostname_pattern(self, port, cfg):
+    @staticmethod
+    def get_hostname_pattern(port, cfg):
         port_owner = port['device_owner']
         if (port_owner
                 in ib_constants.NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP.keys()):
@@ -111,7 +112,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             all_dns_members.extend(dns_members)
             ip_addr = ip['ip_address']
 
-            hostname_pattern = self._get_hostname_pattern(backend_port, cfg)
+            hostname_pattern = self.get_hostname_pattern(backend_port, cfg)
             pattern_builder = self.pattern_builder(hostname_pattern,
                                                    cfg.domain_suffix_pattern)
             fqdn = pattern_builder.build(

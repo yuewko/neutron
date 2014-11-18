@@ -95,7 +95,7 @@ class TestIPAM(base.BaseTestCase):
                               return_value=None) as mock_reconfigure_dhcp:
 
                 self.ipam_driver.update_subnet(self.context,
-                                              SUBNET['id'], SUBNET)
+                                               SUBNET['id'], SUBNET)
                 mock_update_subnet.assert_called_with(
                     self.context, SUBNET['id'], SUBNET)
                 mock_reconfigure_dhcp.assert_called_with(
@@ -118,7 +118,7 @@ class TestIPAM(base.BaseTestCase):
                                     self.ipam_driver.dhcp_controller,
                                     'disable_dhcp') as mock_disable_dhcp:
                                 self.ipam_driver.delete_subnet(self.context,
-                                                              SUBNET['id'])
+                                                               SUBNET['id'])
                                 mock_get_subnet_by_id.assert_called_with(
                                     self.context, SUBNET['id'])
                                 mock_get_subnet_ports.assert_called_with(
@@ -140,7 +140,7 @@ class TestIPAM(base.BaseTestCase):
             with patch.object(self.ipam_driver, 'delete_subnet',
                               return_value=self._delete_subnet_by_id()):
                 self.ipam_driver.delete_subnets_by_network(self.context,
-                                                          NETWORK_ID)
+                                                           NETWORK_ID)
                 mock_get_subnets_by_network.assert_called_with(self.context,
                                                                NETWORK_ID)
 

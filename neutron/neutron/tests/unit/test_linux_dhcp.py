@@ -21,8 +21,8 @@ import mock
 from oslo.config import cfg
 
 from neutron.agent.common import config
-from neutron.agent.linux.dhcp_relay import OPTS as IPAM_OPTS
 from neutron.agent.linux import dhcp
+from neutron.agent.linux.dhcp_relay import OPTS as IPAM_OPTS
 from neutron.common import config as base_config
 from neutron.common import constants
 from neutron.openstack.common import log as logging

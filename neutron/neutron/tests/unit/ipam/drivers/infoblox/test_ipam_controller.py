@@ -60,8 +60,7 @@ class CreateSubnetTestCases(base.BaseTestCase):
         config_finder.find_config_for_subnet = mock.MagicMock(
             return_value=cfg)
 
-        context = infoblox_ipam.FlowContext(mock.MagicMock(),
-                                           'create-subnet')
+        context = infoblox_ipam.FlowContext(mock.MagicMock(), 'create-subnet')
 
         b = ipam_controller.InfobloxIPAMController(self.object_manipulator,
                                                    config_finder,
@@ -168,11 +167,10 @@ class AllocateIPTestCase(base.BaseTestCase):
         ip_allocator = mock.Mock()
         context = mock.Mock()
 
-        hostname = 'fake port id'
         subnet = {'tenant_id': 'some-id'}
         mac = 'aa:bb:cc:dd:ee:ff'
-        port = {'id': hostname,
-                'mac_address': mac}
+        port = {'mac_address': mac,
+                'device_owner': 'owner'}
         ip = '192.168.1.1'
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
@@ -184,7 +182,7 @@ class AllocateIPTestCase(base.BaseTestCase):
         b.allocate_ip(context, subnet, port, ip)
 
         ip_allocator.allocate_given_ip.assert_called_once_with(
-            mock.ANY, mock.ANY, mock.ANY, hostname, mac, ip, mock.ANY)
+            mock.ANY, mock.ANY, mock.ANY, mock.ANY, mac, ip, mock.ANY)
 
     def test_host_record_from_range_created_on_allocate_ip(self):
         infoblox = mock.Mock()
@@ -192,15 +190,14 @@ class AllocateIPTestCase(base.BaseTestCase):
         ip_allocator = mock.Mock()
         context = mock.Mock()
 
-        hostname = 'fake port id'
         first_ip = '192.168.1.1'
         last_ip = '192.168.1.132'
         subnet = {'allocation_pools': [{'first_ip': first_ip,
                                         'last_ip': last_ip}],
                   'tenant_id': 'some-id'}
         mac = 'aa:bb:cc:dd:ee:ff'
-        port = {'id': hostname,
-                'mac_address': mac}
+        port = {'mac_address': mac,
+                'device_owner': 'owner'}
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_config,
@@ -211,7 +208,7 @@ class AllocateIPTestCase(base.BaseTestCase):
 
         assert not ip_allocator.allocate_given_ip.called
         ip_allocator.allocate_ip_from_range.assert_called_once_with(
-            mock.ANY, mock.ANY, mock.ANY, hostname, mac, first_ip, last_ip,
+            mock.ANY, mock.ANY, mock.ANY, mock.ANY, mac, first_ip, last_ip,
             mock.ANY)
 
     def test_cannot_allocate_ip_raised_if_empty_range(self):
@@ -226,7 +223,8 @@ class AllocateIPTestCase(base.BaseTestCase):
                   'cidr': '192.168.0.0/24'}
         mac = 'aa:bb:cc:dd:ee:ff'
         host = {'name': hostname,
-                'mac_address': mac}
+                'mac_address': mac,
+                'device_owner': 'owner'}
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_config,
@@ -454,7 +452,7 @@ class CreateSubnetFlowTestCase(base.BaseTestCase):
         ip_allocator = mock.Mock()
         self.expected_exception = Exception
         self.context = infoblox_ipam.FlowContext(mock.MagicMock(),
-                                                'create-subnet')
+                                                 'create-subnet')
         self.subnet = mock.MagicMock()
         self.subnet.__getitem__.side_effect = mock.MagicMock()
 
@@ -497,7 +495,7 @@ class CreateSubnetFlowNiosNetExistsTestCase(base.BaseTestCase):
         member_conf = mock.MagicMock()
         ip_allocator = mock.Mock()
         self.context = infoblox_ipam.FlowContext(mock.MagicMock(),
-                                                'create-subnet')
+                                                 'create-subnet')
         self.subnet = mock.MagicMock()
         self.subnet.__getitem__.side_effect = mock.MagicMock()
 
@@ -657,7 +655,7 @@ class DeleteNetworkTestCase(base.BaseTestCase):
         ib_db.delete_management_ip.assert_called_once_with(
             context, expected_net_id)
 
-    def test_does_not_delete_management_network_ip_for_external_net(self):
+    def test_deletes_management_network_ip_for_external_net(self):
         infoblox = mock.Mock()
         ip_allocator = mock.Mock()
         member_conf = mock.MagicMock()
@@ -681,8 +679,8 @@ class DeleteNetworkTestCase(base.BaseTestCase):
                                                    ib_db)
         b.delete_network(context, network_id)
 
-        assert not infoblox.delete_object_by_ref.called
-        assert not ib_db.delete_management_ip.called
+        assert infoblox.delete_object_by_ref.called
+        assert ib_db.delete_management_ip.called
 
 
 class CreateNetworkTestCase(base.BaseTestCase):

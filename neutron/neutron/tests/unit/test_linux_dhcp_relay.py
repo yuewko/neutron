@@ -19,8 +19,8 @@ import os
 import mock
 
 from neutron.agent.common import config
-from neutron.agent.linux import dhcp_relay
 from neutron.agent.linux import dhcp
+from neutron.agent.linux import dhcp_relay
 from neutron.agent.linux import interface
 from neutron.common import config as base_config
 from neutron.common import exceptions as exc

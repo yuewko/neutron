@@ -22,8 +22,8 @@ import netaddr
 from oslo.config import cfg
 
 from neutron.agent.common import config
-from neutron.agent.linux import dhcp_relay
 from neutron.agent.linux import dhcp
+from neutron.agent.linux import dhcp_relay
 from neutron.agent.linux import external_process
 from neutron.agent.linux import interface
 from neutron.agent.linux import ovs_lib  # noqa

@@ -56,6 +56,9 @@ OPTS = [
 ]
 
 
+MGMT_INTERFACE_IP_ATTR = 'mgmt_iface_ip'
+
+
 def _generate_mac_address():
     mac = [0x00, 0x16, 0x3e,
            random.randint(0x00, 0x7f),
@@ -87,7 +90,7 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
     def __init__(self, conf, network, root_helper='sudo',
                  version=None, plugin=None):
         super(DhcpDnsProxy, self).__init__(conf, network, root_helper,
-                                       version, plugin)
+                                           version, plugin)
 
         external_dhcp_servers = self._get_relay_ips('external_dhcp_servers')
         external_dns_servers = self._get_relay_ips('external_dns_servers')
@@ -97,8 +100,8 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
 
         for option_name, option in required_options.iteritems():
             if not option:
-                LOG.error(_('You must specify an {opt:s} option '
-                            'in config'.format(opt=option_name)))
+                LOG.error(_('You must specify an %s option in config'),
+                          option_name)
                 raise exc.InvalidConfigurationOption(
                     opt_name=option_name,
                     opt_value=option
@@ -339,7 +342,7 @@ class DnsDhcpProxyDeviceManager(dhcp.DeviceManager):
 
             use_static_ip_allocation = (
                 self.conf.dhcp_relay_management_network is not None
-                and hasattr(network, 'mgmt_iface_ip'))
+                and hasattr(network, MGMT_INTERFACE_IP_ATTR))
 
             if use_static_ip_allocation:
                 self._allocate_static_ip(network, iface_name)
@@ -352,7 +355,7 @@ class DnsDhcpProxyDeviceManager(dhcp.DeviceManager):
 
     def _allocate_static_ip(self, network, iface_name):
         mgmt_net = self.conf.dhcp_relay_management_network
-        relay_ip = netaddr.IPAddress(network.infoblox_mgmt_iface_ip)
+        relay_ip = netaddr.IPAddress(getattr(network, MGMT_INTERFACE_IP_ATTR))
         relay_net = netaddr.IPNetwork(mgmt_net)
         relay_ip_cidr = '/'.join([str(relay_ip), str(relay_net.prefixlen)])
         relay_iface = ip_lib.IPDevice(iface_name, self.root_helper)

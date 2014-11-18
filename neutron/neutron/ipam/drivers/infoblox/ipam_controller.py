@@ -24,9 +24,7 @@ from neutron.ipam.drivers.infoblox import ea_manager
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import tasks
 from neutron.ipam.drivers import neutron_ipam
-from neutron.extensions import external_net
 from neutron.openstack.common import log as logging
-from neutron.openstack.common import uuidutils
 
 
 OPTS = [
@@ -222,19 +220,22 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         return deleted_subnet
 
     def allocate_ip(self, context, subnet, port, ip=None):
-        hostname = port.get('id') or uuidutils.generate_uuid()
         mac = port['mac_address']
         extattrs = self.ea_manager.get_extattrs_for_ip(context, port)
-
-        LOG.debug("Trying to allocate IP for %s on Infoblox NIOS" % hostname)
-
         cfg = self.config_finder.find_config_for_subnet(context, subnet)
+
+        dns_cntrlr = dns_controller.InfobloxDNSController
+        hostname_pattern = dns_cntrlr.get_hostname_pattern(port, cfg)
 
         networkview_name = cfg.network_view
         dnsview_name = cfg.dns_view
+
+        pattern_builder = self.pattern_builder(hostname_pattern)
+        hostname = pattern_builder.build(context, subnet, port, ip)
         zone_auth = self.pattern_builder(cfg.domain_suffix_pattern).build(
             context, subnet)
 
+        LOG.debug("Trying to allocate IP for %s on Infoblox NIOS" % hostname)
         if ip:
             allocated_ip = self.ip_allocator.allocate_given_ip(
                 networkview_name, dnsview_name, zone_auth, hostname, mac, ip,

@@ -22,7 +22,7 @@ from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy import orm
 from sqlalchemy.orm import exc
 
-from neutron.db import common_db_mixin
+from neutron.db import db_base_plugin_v2 as base_db
 from neutron.db import model_base
 from neutron.db import models_v2
 from neutron.extensions import firewall
@@ -85,8 +85,7 @@ class FirewallPolicy(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
     firewalls = orm.relationship(Firewall, backref='firewall_policies')
 
 
-class Firewall_db_mixin(firewall.FirewallPluginBase,
-                        common_db_mixin.CommonDbMixin):
+class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
     """Mixin class for Firewall DB implementation."""
 
     @property

@@ -243,6 +243,12 @@ class HostRecordIPv4(IPAllocationObject):
     def __repr__(self):
         return "HostRecord({})".format(self.to_dict())
 
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__) and
+                self.ips == other.ips and
+                self.name == other.name and
+                self.dns_view == other.dns_view)
+
     @property
     def ip(self):
         if self.ips:

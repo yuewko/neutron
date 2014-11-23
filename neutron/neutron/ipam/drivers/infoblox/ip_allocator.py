@@ -84,13 +84,19 @@ class HostRecordIPAllocator(IPAllocator):
         # See OPENSTACK-181. In case hostname already exists on NIOS, update
         # host record which contains that hostname with the new IP address
         # rather than creating a separate host record object
-        host_record = self.infoblox.find_hostname(dnsview_name, name)
-        if host_record:
-            hr = self.infoblox.get_host_record(dnsview_name, ip)
-            for hr_ip in hr.ips:
+        reserved_hostname_hr = self.infoblox.find_hostname(dnsview_name, name)
+        reserved_ip_hr = self.infoblox.get_host_record(dnsview_name, ip)
+
+        if reserved_hostname_hr == reserved_ip_hr:
+            return
+
+        if reserved_hostname_hr:
+            for hr_ip in reserved_ip_hr.ips:
                 if hr_ip == ip:
                     self.infoblox.delete_host_record(dnsview_name, ip)
-                    self.infoblox.add_ip_to_record(host_record, ip, hr_ip.mac)
+                    self.infoblox.add_ip_to_record(reserved_hostname_hr,
+                                                   ip,
+                                                   hr_ip.mac)
                     break
         else:
             self.infoblox.bind_name_with_host_record(dnsview_name, ip, name)

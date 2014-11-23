@@ -20,10 +20,12 @@ ovs-vsctl: CommandFilter, ovs-vsctl, root
 ivs-ctl: CommandFilter, ivs-ctl, root
 mm-ctl: CommandFilter, mm-ctl, root
 dhcp_release: CommandFilter, dhcp_release, root
+
+# DHCP relay specific options
 dhcrelay: CommandFilter, /usr/local/dhcp-4.3.0/sbin/dhcrelay, root
 dhclient: CommandFilter, /usr/local/dhcp-4.3.0/sbin/dhclient, root
 dnsmasq: CommandFilter, dnsmasq, root
-kill: CommandFilter, kill, root
+kill_dhcrelay: KillFilter, root, /usr/local/dhcp-4.3.0/sbin/dhcrelay, -9
 
 # metadata proxy
 metadata_proxy: CommandFilter, neutron-ns-metadata-proxy, root
@@ -40,6 +42,3 @@ kill_metadata6: KillFilter, root, /usr/bin/python2.6, -9
 # ip_lib
 ip: IpFilter, ip, root
 ip_exec: IpNetnsExecFilter, ip, root
-
-# env
-env: CommandFilter, env, root

@@ -360,8 +360,9 @@ class DnsDhcpProxyDeviceManager(dhcp.DeviceManager):
         relay_ip_cidr = '/'.join([str(relay_ip), str(relay_net.prefixlen)])
         relay_iface = ip_lib.IPDevice(iface_name, self.root_helper)
 
-        LOG.info(_('Allocating static IP %s for %s interface'),
-                 relay_ip, iface_name)
+        LOG.info(_('Allocating static IP %(ip)s for %(name)s interface'),
+                 {'ip': relay_ip,
+                  'name': iface_name})
 
         if network.namespace:
             relay_iface.namespace = network.namespace

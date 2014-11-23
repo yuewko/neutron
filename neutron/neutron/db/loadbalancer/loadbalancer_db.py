@@ -15,9 +15,14 @@
 #    under the License.
 #
 
+import sqlalchemy as sa
+from sqlalchemy import orm
+from sqlalchemy.orm import exc
+from sqlalchemy.orm import validates
+
 from neutron.api.v2 import attributes
 from neutron.common import exceptions as n_exc
-from neutron.db import common_db_mixin
+from neutron.db import db_base_plugin_v2 as base_db
 from neutron.db import model_base
 from neutron.db import models_v2
 from neutron.db import servicetype_db as st_db
@@ -30,10 +35,6 @@ from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
 from neutron.plugins.common import constants
 from neutron.services.loadbalancer import constants as lb_const
-import sqlalchemy as sa
-from sqlalchemy import orm
-from sqlalchemy.orm import exc
-from sqlalchemy.orm import validates
 
 
 LOG = logging.getLogger(__name__)
@@ -177,7 +178,7 @@ class PoolMonitorAssociation(model_base.BASEV2,
 
 
 class LoadBalancerPluginDb(LoadBalancerPluginBase,
-                           common_db_mixin.CommonDbMixin):
+                           base_db.CommonDbMixin):
     """Wraps loadbalancer with SQLAlchemy models.
 
     A class that wraps the implementation of the Neutron loadbalancer

@@ -141,7 +141,8 @@ class InfobloxObjectManipulator(object):
         fa_data = {'view': dns_view,
                    'ipv4addr': ip}
         fa = self._get_infoblox_object_or_none('record:host', fa_data)
-        self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
+        if fa:
+            self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
     def update_fixed_address_eas(self, network_view, ip, extattrs):
         fa_data = {'network_view': network_view,

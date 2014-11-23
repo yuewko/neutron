@@ -19,7 +19,7 @@
 
 from neutron.common import constants as const
 from neutron.db import agents_db
-from neutron.db import common_db_mixin
+from neutron.db import db_base_plugin_v2 as base_db
 from neutron.db import models_v2
 from neutron.openstack.common import jsonutils
 from neutron.openstack.common import timeutils
@@ -27,7 +27,7 @@ from neutron.plugins.ml2.drivers.l2pop import constants as l2_const
 from neutron.plugins.ml2 import models as ml2_models
 
 
-class L2populationDbMixin(common_db_mixin.CommonDbMixin):
+class L2populationDbMixin(base_db.CommonDbMixin):
 
     def get_agent_ip_by_host(self, session, agent_host):
         agent = self.get_agent_by_host(session, agent_host)

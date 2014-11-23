@@ -21,7 +21,7 @@ from sqlalchemy.orm import exc
 
 from neutron.common import constants
 from neutron.common import exceptions as q_exc
-from neutron.db import common_db_mixin
+from neutron.db import db_base_plugin_v2
 from neutron.db import models_v2
 from neutron.openstack.common import log as logging
 
@@ -39,7 +39,7 @@ AUTO_DELETE_PORT_OWNERS = ['network:dhcp']
 LOG = logging.getLogger(__name__)
 
 
-class BackendController(common_db_mixin.CommonDbMixin):
+class BackendController(db_base_plugin_v2.CommonDbMixin):
 
     def _get_network(self, context, net_id):
         # NOTE(zasimov): Copy-paste from db_base_plugin_v2

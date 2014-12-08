@@ -122,7 +122,7 @@ class HostRecordIPAllocator(IPAllocator):
     def deallocate_ip(self, network_view, dns_view_name, ip):
         host_record = self.infoblox.get_host_record(dns_view_name, ip)
 
-        if len(host_record.ips) > 1:
+        if host_record and len(host_record.ips) > 1:
             self.infoblox.delete_ip_from_host_record(host_record, ip)
         else:
             self.infoblox.delete_host_record(dns_view_name, ip)

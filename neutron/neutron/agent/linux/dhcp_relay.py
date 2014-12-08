@@ -29,12 +29,12 @@ from neutron.openstack.common import uuidutils
 LOG = logging.getLogger(__name__)
 
 OPTS = [
-    cfg.StrOpt('external_dhcp_servers',
+    cfg.ListOpt('external_dhcp_servers',
                default=None,
-               help=_('IP address of DHCP server to relay to.')),
-    cfg.StrOpt('external_dns_servers',
+               help=_('IP addresses of DHCP servers to relay to.')),
+    cfg.ListOpt('external_dns_servers',
                default=None,
-               help=_('IP address of DNS server to relay to.')),
+               help=_('IP addresses of DNS servers to relay to.')),
     cfg.StrOpt('dhcp_relay_bridge',
                default=None,
                help=_('Name of a bridge through which ipam proxy agent will'

@@ -154,6 +154,9 @@ class Infoblox(object):
                              verify=self.sslverify,
                              headers=headers)
 
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential()
+
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxSearchError(
                 response=jsonutils.loads(r.content),

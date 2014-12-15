@@ -181,7 +181,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             build(context, backend_subnet)
         dnsview_name = cfg.dns_view
 
-        if not cfg.is_global_config:
+        if not cfg.is_global_config and '{subnet_name}' in cfg.domain_suffix_pattern:
             self.infoblox.delete_dns_zone(dnsview_name, dns_zone_fqdn)
         self.infoblox.delete_dns_zone(dnsview_name, backend_subnet['cidr'])
 

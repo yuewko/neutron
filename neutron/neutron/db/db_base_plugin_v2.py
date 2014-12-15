@@ -575,6 +575,26 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                 ips.append(ip)
         return ips
 
+    def _allocate_fixed_ip(self, context, port, subnets):
+        """Allocate first avaliable IP addresses according to
+        the configured fixed_ips.
+
+        fixed_ips is list of dicts:
+            subnet_id - subnet identifier
+            ip_address - ip address (optional)
+        """
+        for subnet in subnets:
+            subnet_id = subnet['subnet_id']
+            ip_address = subnet.get('ip_address', None)
+
+            ip_address = self.ipam.allocate_ip(context, port,
+                                              dict(subnet_id=subnet_id,
+                                                   ip_address=ip_address))
+            if ip_address:
+                return [dict(subnet_id=subnet_id,
+                             ip_address=ip_address)]
+        return []
+
     def _update_ips_for_port(self, context, network_id, port, original_ips,
                              new_ips):
         """Add or remove IPs from the port."""
@@ -647,12 +667,13 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                     v6.append(subnet)
             version_subnets = [v4, v6]
             for subnets in version_subnets:
-                fixed_ips = [dict(subnet_id=subnet['id'])
-                             for subnet in subnets]
-                allocated_ips = self._allocate_fixed_ips(context,
-                                                         p,
-                                                         fixed_ips)
-                ips.extend(allocated_ips)
+                subnets_list = [dict(subnet_id=subnet['id'])
+                                for subnet in subnets]
+                allocated_ip = self._allocate_fixed_ip(context,
+                                                       p,
+                                                       subnets_list)
+                if allocated_ip:
+                    ips.extend(allocated_ip)
         return ips
 
     def _validate_subnet_cidr(self, context, network, new_subnet_cidr):

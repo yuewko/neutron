@@ -56,7 +56,6 @@ class InfobloxObjectManipulator(object):
             dhcp_options.append({'name': 'routers',
                                  'value': gateway_ip})
 
-        LOG.error(dhcp_trel_ip)
         if dhcp_trel_ip:
             dhcp_options.append({'name': 'dhcp-server-identifier',
                                          'num': 54,
@@ -64,7 +63,6 @@ class InfobloxObjectManipulator(object):
 
         if dhcp_options:
             network_data['options'] = dhcp_options
-        LOG.error(network_data)
 
         return self._create_infoblox_object(
             'network', network_data, check_if_exists=False)

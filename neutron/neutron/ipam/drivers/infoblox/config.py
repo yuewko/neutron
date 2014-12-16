@@ -23,6 +23,7 @@ from oslo.config import cfg as neutron_conf
 from neutron.db.infoblox import infoblox_db as ib_db
 from neutron.db.infoblox import models as ib_models
 from neutron.ipam.drivers.infoblox import exceptions
+from neutron.ipam.drivers.infoblox import nova_manager
 from neutron.ipam.drivers.infoblox import objects
 
 LOG = logging.getLogger(__name__)
@@ -148,6 +149,10 @@ class PatternBuilder(object):
         if port:
             pattern_dict['port_id'] = port['id']
             pattern_dict['instance_id'] = port['device_id']
+
+            nm = nova_manager.NovaManager(port['tenant_id'])
+            pattern_dict['instance_name'] = nm.get_instance_name_by_id(
+                port['device_id'])
 
         try:
             fqdn = self.pattern.format(**pattern_dict)

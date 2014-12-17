@@ -108,9 +108,15 @@ class HostRecordIPAllocator(IPAllocator):
     def allocate_ip_from_range(self, dnsview_name, networkview_name, zone_auth,
                                hostname, mac, first_ip, last_ip,
                                extattrs=None):
-        hr = self.infoblox.create_host_record_from_range(
-            dnsview_name, networkview_name, zone_auth, hostname, mac,
-            first_ip, last_ip)
+        fqdn = hostname + '.' + zone_auth
+        host_record = self.infoblox.find_hostname(dnsview_name, fqdn)
+        if host_record:
+            hr = self.infoblox.add_ip_to_host_record_from_range(
+                host_record, networkview_name, mac, first_ip, last_ip)
+        else:
+            hr = self.infoblox.create_host_record_from_range(
+                dnsview_name, networkview_name, zone_auth, hostname, mac,
+                first_ip, last_ip)
         return hr.ips[-1].ip
 
     def allocate_given_ip(self, netview_name, dnsview_name, zone_auth,

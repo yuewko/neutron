@@ -434,6 +434,13 @@ class InfobloxObjectManipulator(object):
         hr = objects.HostRecordIPv4.from_dict(ips)
         return hr
 
+    def add_ip_to_host_record_from_range(self, host_record, network_view,
+                                         mac, first_ip, last_ip):
+        ip = objects.IPAllocationObject.next_available_ip_from_range(
+                network_view, first_ip, last_ip)
+        hr = self.add_ip_to_record(host_record, ip, mac)
+        return hr
+
     def _create_infoblox_ip_address(self, ip_object):
         try:
             created_ip_json = self._create_infoblox_object(

@@ -140,17 +140,15 @@ class Infoblox(object):
 
         self._validate_objtype_or_die(nios_object, objtype_expected=False)
 
-        query_params = dict()
+        query_params = payload
         if return_fields:
             query_params['_return_fields'] = ','.join(return_fields)
 
         headers = {'Content-type': 'application/json'}
 
-        data = jsonutils.dumps(payload)
         url = self._construct_url(nios_object, query_params, extattrs)
 
         r = self.session.get(url,
-                             data=data,
                              verify=self.sslverify,
                              headers=headers)
 

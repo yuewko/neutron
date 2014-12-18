@@ -235,8 +235,7 @@ class AllocateIPTestCase(base.BaseTestCase):
 
         assert not infoblox.create_host_record_range.called
         assert not infoblox.create_host_record_ip.called
-        self.assertRaises(ib_exceptions.InfobloxCannotAllocateIpForSubnet,
-                          b.allocate_ip, context, subnet, host)
+        assert not b.allocate_ip(context, subnet, host)
 
 
 class DeallocateIPTestCase(base.BaseTestCase):

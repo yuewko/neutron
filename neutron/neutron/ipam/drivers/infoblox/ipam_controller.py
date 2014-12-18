@@ -258,8 +258,9 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             else:
                 # We went through all the ranges and Infoblox did not
                 # allocated any IP.
-                raise exceptions.InfobloxCannotAllocateIpForSubnet(
-                    netview=networkview_name, cidr=subnet['cidr'])
+                LOG.debug("Network %s does not have IPs "
+                          "available for allocation." % subnet['cidr'])
+                return None
 
         # TODO(max_lobur): As kind of optimisation we could mark IP as used by
         # neutron_ipam._allocate_specific_ip, to prevent poking already empty

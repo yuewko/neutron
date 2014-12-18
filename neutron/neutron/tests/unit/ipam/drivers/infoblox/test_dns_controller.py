@@ -220,6 +220,7 @@ class DomainZoneTestCase(base.BaseTestCase):
 
         cfg = mock.Mock()
         cfg.is_global_config = False
+        cfg.domain_suffix_pattern = '{subnet_name}.cloud.com'
         cfg.dns_view = expected_dns_view
 
         ip_allocator = mock.Mock()

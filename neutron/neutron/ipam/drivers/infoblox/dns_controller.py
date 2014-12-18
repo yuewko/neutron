@@ -181,9 +181,13 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             build(context, backend_subnet)
         dnsview_name = cfg.dns_view
 
+        # always delete fqdn if 'subnet_name' is present in it
+        # for last subnet in network also delete fqdn with 'network_name'
         if not cfg.is_global_config and \
-                ('{subnet_name}' in cfg.domain_suffix_pattern or
-                 '{network_name}' in cfg.domain_suffix_pattern):
+           ('{subnet_name}' in cfg.domain_suffix_pattern or \
+           ('{network_name}' in cfg.domain_suffix_pattern and \
+           infoblox_db.is_last_subnet_in_network(
+               context, backend_subnet['id'], backend_subnet['network_id']))):
             self.infoblox.delete_dns_zone(dnsview_name, dns_zone_fqdn)
         self.infoblox.delete_dns_zone(dnsview_name, backend_subnet['cidr'])
 

@@ -62,6 +62,12 @@ def is_last_subnet(context, subnet_id):
     return q.filter(models_v2.Subnet.id != subnet_id).count() == 0
 
 
+def is_last_subnet_in_network(context, subnet_id, network_id):
+    q = context.session.query(models_v2.Subnet)
+    return q.filter(models_v2.Subnet.id != subnet_id,
+                    models_v2.Subnet.network_id == network_id).count() == 0
+
+
 def is_network_external(context, network_id):
     try:
         context.session.query(external_net_db.ExternalNetwork).filter_by(

@@ -653,6 +653,10 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                                                          p,
                                                          fixed_ips)
                 ips.extend(allocated_ips)
+
+        if not ips:
+            raise n_exc.IpAddressGenerationFailure(net_id=p["network_id"])
+
         return ips
 
     def _validate_subnet_cidr(self, context, network, new_subnet_cidr):

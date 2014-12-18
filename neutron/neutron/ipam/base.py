@@ -295,12 +295,13 @@ class IPAM(BackendController):
             host,
             ip.get('ip_address', None))
         LOG.debug('IPAM allocate IP: %s' % ip_address)
-        mac_address = host['mac_address']
-        self.dhcp_controller.bind_mac(
-            context,
-            backend_subnet,
-            ip_address,
-            mac_address)
+        if ip_address:
+            mac_address = host['mac_address']
+            self.dhcp_controller.bind_mac(
+                context,
+                backend_subnet,
+                ip_address,
+                mac_address)
         return ip_address
 
     def deallocate_ip(self, context, host, ip):

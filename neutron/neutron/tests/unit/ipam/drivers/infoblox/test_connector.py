@@ -124,8 +124,7 @@ class TestInfobloxConnector(base.BaseTestCase):
             patched_get.return_value.content = '{}'
             self.connector.get_object(objtype, payload)
             patched_get.assert_called_once_with(
-                'https://infoblox.example.org/wapi/v1.1/network',
-                data='{"ip": "0.0.0.0"}',
+                'https://infoblox.example.org/wapi/v1.1/network?ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
                 verify=False
             )
@@ -143,8 +142,7 @@ class TestInfobloxConnector(base.BaseTestCase):
             self.connector.get_object(objtype, payload, extattrs=extattrs)
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/'
-                'v1.1/network?*Subnet ID=fake_subnet_id',
-                data='{"ip": "0.0.0.0"}',
+                'v1.1/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
                 verify=False
             )

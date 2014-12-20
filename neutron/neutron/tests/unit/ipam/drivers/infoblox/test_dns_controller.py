@@ -142,6 +142,7 @@ class DomainZoneTestCase(base.BaseTestCase):
         manip = mock.Mock()
         context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
         subnet = {'network_id': 'some-id',
+                  'name': 'some-name',
                   'cidr': 'some-cidr'}
         expected_member = 'member-name'
 
@@ -170,6 +171,7 @@ class DomainZoneTestCase(base.BaseTestCase):
                                       mock.ANY,
                                       expected_member,
                                       mock.ANY,
+                                      prefix=mock.ANY,
                                       zone_format=mock.ANY)
                  ])
 
@@ -177,6 +179,7 @@ class DomainZoneTestCase(base.BaseTestCase):
         manip = mock.Mock()
         context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
         subnet = {'network_id': 'some-id',
+                  'name': 'some-name',
                   'cidr': 'some-cidr'}
         primary_dns_member = 'member-primary'
         secondary_dns_members = ['member-secondary']
@@ -207,6 +210,79 @@ class DomainZoneTestCase(base.BaseTestCase):
                                       mock.ANY,
                                       primary_dns_member,
                                       secondary_dns_members,
+                                      prefix=mock.ANY,
+                                      zone_format=mock.ANY)
+                 ])
+
+    def test_prefix_for_classless_networks(self):
+        manip = mock.Mock()
+        context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
+        subnet = {'network_id': 'some-id',
+                  'name': 'some-name',
+                  'cidr': '192.168.0.128/27'}
+
+        ip_allocator = mock.Mock()
+        config_finder = mock.Mock()
+
+        cfg = mock.Mock()
+        cfg.ns_group = None
+        cfg.reserve_dns_members.return_value = (['some-member'])
+
+        config_finder.find_config_for_subnet.return_value = cfg
+
+        dns_ctrlr = dns_controller.InfobloxDNSController(
+            ip_allocator, manip, config_finder)
+        dns_ctrlr.pattern_builder = mock.Mock()
+        dns_ctrlr.create_dns_zones(context, subnet)
+
+        taskflow.engines.run(context.parent_flow, store=context.store)
+
+        assert (manip.method_calls ==
+                [call.create_dns_zone(mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY),
+                 call.create_dns_zone(mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY,
+                                      prefix=subnet['name'],
+                                      zone_format=mock.ANY)
+                 ])
+
+    def test_prefix_for_classfull_networks(self):
+        manip = mock.Mock()
+        context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
+        subnet = {'network_id': 'some-id',
+                  'name': 'some-name',
+                  'cidr': '192.168.0.0/24'}
+
+        ip_allocator = mock.Mock()
+        config_finder = mock.Mock()
+
+        cfg = mock.Mock()
+        cfg.ns_group = None
+        cfg.reserve_dns_members.return_value = (['some-member'])
+
+        config_finder.find_config_for_subnet.return_value = cfg
+
+        dns_ctrlr = dns_controller.InfobloxDNSController(
+            ip_allocator, manip, config_finder)
+        dns_ctrlr.pattern_builder = mock.Mock()
+        dns_ctrlr.create_dns_zones(context, subnet)
+
+        taskflow.engines.run(context.parent_flow, store=context.store)
+
+        assert (manip.method_calls ==
+                [call.create_dns_zone(mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY),
+                 call.create_dns_zone(mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY,
+                                      mock.ANY,
+                                      prefix=None,
                                       zone_format=mock.ANY)
                  ])
 

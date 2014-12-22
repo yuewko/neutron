@@ -148,11 +148,19 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
 
         dns_zone = self.pattern_builder(cfg.domain_suffix_pattern).\
             build(context, backend_subnet)
+
+        # OS-583: Add prefix only for classless networks
+        prefix = backend_subnet['name']
+        for mask in ['0', '8', '16', '24']:
+            if backend_subnet['cidr'].endswith(mask):
+                prefix = None
+
         args = {
             'backend_subnet': backend_subnet,
             'dnsview_name': cfg.dns_view,
             'fqdn': dns_zone,
             'cidr': backend_subnet['cidr'],
+            'prefix': prefix,
             'zone_format': 'IPV4',
             'obj_manip': self.infoblox
         }

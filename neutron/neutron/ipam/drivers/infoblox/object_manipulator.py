@@ -340,7 +340,7 @@ class InfobloxObjectManipulator(object):
 
     def create_dns_zone(self, dns_view, dns_zone_fqdn, primary_dns_member=None,
                         secondary_dns_members=None, zone_format=None,
-                        ns_group=None):
+                        ns_group=None, prefix=None):
         # TODO(mirantis) support IPv6
         dns_zone_data = {'fqdn': dns_zone_fqdn,
                          'view': dns_view}
@@ -358,6 +358,8 @@ class InfobloxObjectManipulator(object):
             additional_create_kwargs['zone_format'] = zone_format
         if ns_group:
             additional_create_kwargs['ns_group'] = ns_group
+        if prefix:
+            additional_create_kwargs['prefix'] = prefix
 
         try:
             self._create_infoblox_object(

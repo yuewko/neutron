@@ -101,9 +101,10 @@ class CreateDNSZonesTask(task.Task):
 
 class CreateDNSZonesTaskCidr(task.Task):
     def execute(self, obj_manip, dnsview_name, cidr, dns_member, zone_format,
-                secondary_dns_members, **kwargs):
+                secondary_dns_members, prefix, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, cidr, dns_member,
                                   secondary_dns_members,
+                                  prefix=prefix,
                                   zone_format=zone_format)
 
     def revert(self, obj_manip, dnsview_name, cidr, **kwargs):
@@ -120,9 +121,10 @@ class CreateDNSZonesFromNSGroupTask(task.Task):
 
 class CreateDNSZonesCidrFromNSGroupTask(task.Task):
     def execute(self, obj_manip, dnsview_name, cidr, ns_group, zone_format,
-                **kwargs):
+                prefix, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, cidr,
                                   ns_group=ns_group,
+                                  prefix=prefix,
                                   zone_format=zone_format)
 
     def revert(self, obj_manip, dnsview_name, cidr, **kwargs):

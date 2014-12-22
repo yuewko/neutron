@@ -153,7 +153,7 @@ class Infoblox(object):
                              headers=headers)
 
         if r.status_code == requests.codes.UNAUTHORIZED:
-            raise exc.InfobloxBadWAPICredential()
+            raise exc.InfobloxBadWAPICredential(response='')
 
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxSearchError(
@@ -196,6 +196,9 @@ class Infoblox(object):
                               verify=self.sslverify,
                               headers=headers)
 
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
+
         if r.status_code != requests.codes.CREATED:
             raise exc.InfobloxCannotCreateObject(
                 response=jsonutils.loads(r.content),
@@ -224,6 +227,9 @@ class Infoblox(object):
                               data=jsonutils.dumps(payload),
                               verify=self.sslverify,
                               headers=headers)
+
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
 
         if r.status_code not in (requests.codes.CREATED,
                                  requests.codes.ok):
@@ -258,6 +264,9 @@ class Infoblox(object):
                              verify=self.sslverify,
                              headers=headers)
 
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
+
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxCannotUpdateObject(
                 response=jsonutils.loads(r.content),
@@ -280,6 +289,9 @@ class Infoblox(object):
         """
         r = self.session.delete(self._construct_url(ref),
                                 verify=self.sslverify)
+
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
 
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxCannotDeleteObject(

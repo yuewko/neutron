@@ -189,13 +189,29 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             build(context, backend_subnet)
         dnsview_name = cfg.dns_view
 
-        # always delete fqdn if 'subnet_name' is present in it
-        # for last subnet in network also delete fqdn with 'network_name'
-        if not cfg.is_global_config and \
-           ('{subnet_name}' in cfg.domain_suffix_pattern or \
-           ('{network_name}' in cfg.domain_suffix_pattern and \
-           infoblox_db.is_last_subnet_in_network(
-               context, backend_subnet['id'], backend_subnet['network_id']))):
+        network = self._get_network(context, backend_subnet['network_id'])
+        is_external = infoblox_db.is_network_external(context,
+                                                      network.get('id'))
+        is_shared = network.get('shared')
+
+        # If config is global, do not delete dns zone for that subnet
+        # If subnet is for external or shared network, do not delete a zone
+        #   for the subnet.
+        # If subnet is for private network (not external, shared, or global),
+        #   check if domain suffix is unique to the subnet.
+        #     if subnet name is part of the domain suffix pattern, then delete
+        #       forward zone.
+        #     if network name is part of the domain suffix pattern, then delete
+        #       forward zone only if the subnet is only remaining subnet
+        #       in the network.
+        # Reverse zone is always deleted regardless.
+        if not (cfg.is_global_config or is_external or is_shared) and \
+           ( '{subnet_name}' in cfg.domain_suffix_pattern or \
+             ('{network_name}' in cfg.domain_suffix_pattern and \
+              infoblox_db.is_last_subnet_in_network(
+                context, backend_subnet['id'], backend_subnet['network_id'])
+             )
+           ):
             self.infoblox.delete_dns_zone(dnsview_name, dns_zone_fqdn)
         self.infoblox.delete_dns_zone(dnsview_name, backend_subnet['cidr'])
 

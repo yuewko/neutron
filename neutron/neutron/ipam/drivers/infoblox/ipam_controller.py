@@ -327,7 +327,15 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             self.delete_subnet(context, subnet)
 
         if not self.infoblox.has_networks(net_view):
-            self.infoblox.delete_network_view(net_view)
+            # no network ranges exist but dns view may exist, so check for dns view(s)
+            exists_dns_view = False
+            for dns_view in self.infoblox.get_dns_view(net_view):
+                if dns_view and dns_view['name']:
+                    exists_dns_view = True
+
+            # if no dns view, then safe to delete network view
+            if not exists_dns_view:
+                self.infoblox.delete_network_view(net_view)
 
         fixed_address_ref = self.ib_db.get_management_ip_ref(context,
                                                              network_id)

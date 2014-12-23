@@ -326,8 +326,9 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             ))
             self.delete_subnet(context, subnet)
 
-        if not self.infoblox.has_networks(net_view):
-            # no network ranges exist but dns view may exist, so check for dns view(s)
+        if net_view and not self.infoblox.has_networks(net_view):
+            # no network ranges exist but dns view may exist, 
+            # so check for dns view(s)
             exists_dns_view = False
             for dns_view in self.infoblox.get_dns_view(net_view):
                 if dns_view and dns_view['name']:

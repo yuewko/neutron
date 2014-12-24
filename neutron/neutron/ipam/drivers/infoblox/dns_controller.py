@@ -93,6 +93,9 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             self.infoblox.update_dns_record_eas(cfg.dns_view,
                                                 ip_address.floating_ip_address,
                                                 extattrs)
+            self.infoblox.update_host_record_eas(cfg.dns_view,
+                                                ip_address.floating_ip_address,
+                                                extattrs)
 
     @staticmethod
     def get_hostname_pattern(port, cfg):

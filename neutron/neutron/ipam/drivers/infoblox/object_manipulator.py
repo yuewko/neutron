@@ -84,10 +84,13 @@ class InfobloxObjectManipulator(object):
     def create_ip_range(self, network_view, start_ip, end_ip, disable):
         range_data = {'start_addr': start_ip,
                       'end_addr': end_ip,
-                      'network_view': network_view,
-                      'disable': disable}
-        self._create_infoblox_object('range', range_data,
-                                     check_if_exists=False)
+                      'network_view': network_view}
+        ib_object = self._get_infoblox_object_or_none('range', range_data)
+
+        if not ib_object:
+            range_data['disable'] = disable
+            self._create_infoblox_object('range', range_data,
+                                         check_if_exists=False)
 
     def create_host_record_for_given_ip(self, dns_view_name, zone_auth,
                                         hostname, mac, ip):

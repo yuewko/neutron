@@ -204,16 +204,17 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         #     if network name is part of the domain suffix pattern, then delete
         #       forward zone only if the subnet is only remaining subnet
         #       in the network.
-        # Reverse zone is always deleted regardless.
-        if not (cfg.is_global_config or is_external or is_shared) and \
-           ( '{subnet_name}' in cfg.domain_suffix_pattern or \
-             ('{network_name}' in cfg.domain_suffix_pattern and \
-              infoblox_db.is_last_subnet_in_network(
-                context, backend_subnet['id'], backend_subnet['network_id'])
-             )
-           ):
-            self.infoblox.delete_dns_zone(dnsview_name, dns_zone_fqdn)
-        self.infoblox.delete_dns_zone(dnsview_name, backend_subnet['cidr'])
+        # Reverse zone is deleted when not global, not external, and not shared
+        if not (cfg.is_global_config or is_external or is_shared):
+            if ( '{subnet_name}' in cfg.domain_suffix_pattern or \
+                ('{network_name}' in cfg.domain_suffix_pattern and \
+                 infoblox_db.is_last_subnet_in_network(
+                 context, backend_subnet['id'], backend_subnet['network_id'])
+                )
+               ):
+                self.infoblox.delete_dns_zone(dnsview_name, dns_zone_fqdn)
+            # delete reverse zone
+            self.infoblox.delete_dns_zone(dnsview_name, backend_subnet['cidr'])
 
 
 def has_nameservers(subnet):

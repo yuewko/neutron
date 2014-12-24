@@ -200,6 +200,11 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         cfg = self.config_finder.find_config_for_subnet(context, subnet)
         network = self._get_network(context, subnet['network_id'])
         members_to_restart = list(set(cfg.dhcp_members + cfg.dns_members))
+        is_shared = network.get('shared')
+        is_external = infoblox_db.is_network_external(context,
+                                                      subnet['network_id'])
+        if not (is_shared or is_external):
+            self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
 
         self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
 
@@ -327,16 +332,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             self.delete_subnet(context, subnet)
 
         if net_view and not self.infoblox.has_networks(net_view):
-            # no network ranges exist but dns view may exist, 
-            # so check for dns view(s)
-            exists_dns_view = False
-            for dns_view in self.infoblox.get_dns_view(net_view):
-                if dns_view and dns_view['name']:
-                    exists_dns_view = True
-
-            # if no dns view, then safe to delete network view
-            if not exists_dns_view:
-                self.infoblox.delete_network_view(net_view)
+            self.infoblox.delete_network_view(net_view)
 
         fixed_address_ref = self.ib_db.get_management_ip_ref(context,
                                                              network_id)

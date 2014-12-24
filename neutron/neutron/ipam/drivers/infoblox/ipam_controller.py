@@ -203,10 +203,8 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         is_shared = network.get('shared')
         is_external = infoblox_db.is_network_external(context,
                                                       subnet['network_id'])
-        if not (is_shared or is_external):
+        if not (cfg.is_global_config or is_shared or is_external):
             self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
-
-        self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
 
         if self.ib_db.is_last_subnet(context, subnet['id']):
             cfg.member_manager.release_member(context, cfg.network_view)

@@ -47,6 +47,8 @@ class InfobloxEaManager(object):
         :return: dict with extensible attributes ready to be sent as part of
         NIOS WAPI
         """
+        LOG.debug("YKO: ea_manager.get_extattrs_for_network() subnet is '%s', network is '%s'" % (subnet, network))
+
         if subnet is None:
             subnet = {}
         if network is None:
@@ -57,8 +59,11 @@ class InfobloxEaManager(object):
 
         os_network_id = network.get('id')
         os_network_name = network.get('name')
-        os_network_is_external = self.db.is_network_external(
-            context, network.get('id'))
+        if hasattr(subnet,'external'):
+            os_network_is_external = subnet.get('external')
+        else:
+            os_network_is_external = self.db.is_network_external(
+                                              context, network.get('id'))
         os_network_is_shared = network.get('shared')
         os_network_l2_info = self._network_l2_info_provider.\
             get_network_l2_info(context.session, os_network_id)

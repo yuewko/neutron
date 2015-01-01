@@ -93,7 +93,12 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             self.infoblox.update_dns_record_eas(cfg.dns_view,
                                                 ip_address.floating_ip_address,
                                                 extattrs)
-            self.infoblox.update_host_record_eas(cfg.dns_view,
+            if cfg.CONF.use_host_records_for_ip_allocation:
+                self.infoblox.update_host_record_eas(cfg.dns_view,
+                                                ip_address.floating_ip_address,
+                                                extattrs)
+            else:
+                self.infoblox.update_fixed_address_eas(cfg.network_view,
                                                 ip_address.floating_ip_address,
                                                 extattrs)
 
@@ -209,10 +214,21 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         #       in the network.
         # Reverse zone is deleted when not global, not external, and not shared
         if not (cfg.is_global_config or is_external or is_shared):
-            if ( '{subnet_name}' in cfg.domain_suffix_pattern or \
-                ('{network_name}' in cfg.domain_suffix_pattern and \
+            if (
+                (
+                 '{subnet_name}' in cfg.domain_suffix_pattern or
+                 '{subnet_id}' in cfg.domain_suffix_pattern
+                ) or
+                (
+                 ('{network_name}' in cfg.domain_suffix_pattern or
+                   '{network_id}' in cfg.domain_suffix_pattern
+                 ) and
                  infoblox_db.is_last_subnet_in_network(
-                 context, backend_subnet['id'], backend_subnet['network_id'])
+                   context, backend_subnet['id'], backend_subnet['network_id'])
+                ) or
+                ( '{tenant_id}' in cfg.domain_suffix_pattern and
+                  infoblox_db.is_last_subnet_in_tenant(
+                    context, backend_subnet['id'], backend_subnet['tenant_id'])
                 )
                ):
                 self.infoblox.delete_dns_zone(dnsview_name, dns_zone_fqdn)

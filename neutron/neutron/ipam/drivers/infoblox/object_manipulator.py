@@ -235,8 +235,8 @@ class InfobloxObjectManipulator(object):
         self._update_infoblox_object_by_ref(ib_network.ref, payload)
 
     def get_dns_view(self, net_view_name):
-         net_data = {'network_view': net_view_name}
-         return self.connector.get_object('view', net_data)
+        net_data = {'network_view': net_view_name}
+        return self.connector.get_object('view', net_data)
 
     def get_network(self, net_view_name, cidr):
         net_data = {'network_view': net_view_name,

@@ -161,10 +161,10 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
 
     def update_subnet(self, context, subnet_id, subnet):
         backend_subnet = self.get_subnet_by_id(context, subnet_id)
-
+        LOG.debug("YKO: InfoblxIPAMController.update_subnet() subnet is '%s', backend_subnet is '%s'" % (subnet, backend_subnet))
         cfg = self.config_finder.find_config_for_subnet(context,
                                                         backend_subnet)
-        cfg.verify_subnet_update_is_allowed()
+        # cfg.verify_subnet_update_is_allowed()
 
         ib_network = self.infoblox.get_network(cfg.network_view,
                                                subnet['cidr'])
@@ -216,7 +216,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                 member.filter_by(network_id=network.id).delete()
 
         preconf_dns_view = cfg._dns_view
-        if (preconf_dns_view
+        if (preconf_dns_view and not preconf_dns_view.startswith('default')
                 and not self.infoblox.has_dns_zones(preconf_dns_view)):
             self.infoblox.delete_dns_view(preconf_dns_view)
 

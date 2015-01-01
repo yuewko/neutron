@@ -116,6 +116,22 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
         return 0
 
     @classmethod
+    def get_isolated_subnets(cls, network):
+        """Returns a dict indicating whether or not a subnet is isolated"""
+        if hasattr(dhcp.Dnsmasq, 'get_isolated_subnets') \
+               and callable(getattr(dhcp.Dnsmasq, 'get_isolated_subnets')):
+            dhcp.Dnsmasq.get_isolated_subnets(network)
+
+    @classmethod
+    def should_enable_metadata(cls, conf, network):
+        """True if the metadata-proxy should be enabled for the network."""
+        if hasattr(dhcp.Dnsmasq, 'should_enable_metadata') \
+               and callable(getattr(dhcp.Dnsmasq, 'should_enable_metadata')):
+            dhcp.Dnsmasq.should_enable_metadata(conf, network)
+        else:
+            conf.enable_isolated_metadata
+ 
+    @classmethod    
     def existing_dhcp_networks(cls, conf, root_helper):
         """Return a list of existing networks ids that we have configs for."""
 

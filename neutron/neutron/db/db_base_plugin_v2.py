@@ -993,7 +993,6 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         is_external = network.get('network').get('router:external')
         if not is_external:
             is_external = False
-        LOG.debug("YKO: db_base_plugin_v2.update_network() network is '%s', is_external is '%s'" % (network, is_external))
         with context.session.begin(subtransactions=True):
             network = self._get_network(context, id)
             # validate 'shared' parameter
@@ -1201,6 +1200,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         s['cidr'] = db_subnet.cidr
         s['id'] = db_subnet.id
         s['network_id'] = db_subnet.network_id
+        s['tenant_id'] = db_subnet.tenant_id
         self._validate_subnet(context, s, cur_subnet=db_subnet)
 
         if 'gateway_ip' in s and s['gateway_ip'] is not None:

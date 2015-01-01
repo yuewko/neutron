@@ -161,10 +161,10 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
 
     def update_subnet(self, context, subnet_id, subnet):
         backend_subnet = self.get_subnet_by_id(context, subnet_id)
-        LOG.debug("YKO: InfoblxIPAMController.update_subnet() subnet is '%s', backend_subnet is '%s'" % (subnet, backend_subnet))
         cfg = self.config_finder.find_config_for_subnet(context,
                                                         backend_subnet)
-        # cfg.verify_subnet_update_is_allowed()
+        
+        cfg.verify_subnet_update_is_allowed(subnet)
 
         ib_network = self.infoblox.get_network(cfg.network_view,
                                                subnet['cidr'])

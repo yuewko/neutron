@@ -306,15 +306,18 @@ class Config(object):
     def requires_net_view(self):
         return True
 
-    def verify_subnet_update_is_allowed(self):
+    def verify_subnet_update_is_allowed(self, subnet_new):
         """
         Subnet update procedure is not allowed if Infoblox zone name exists on
         NIOS. This can only happen if domain suffix pattern has subnet name
         included.
         """
+        subnet_new_name = subnet_new.get('name')
         subnet_name = self.subnet.get('name')
         pattern = self.domain_suffix_pattern
         update_allowed = not (subnet_name is not None and
+                              subnet_new_name is not None and
+                              subnet_name != subnet_new_name and
                               '{subnet_name}' in pattern)
 
         if not update_allowed:

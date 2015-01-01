@@ -47,7 +47,6 @@ class InfobloxEaManager(object):
         :return: dict with extensible attributes ready to be sent as part of
         NIOS WAPI
         """
-        LOG.debug("YKO: ea_manager.get_extattrs_for_network() subnet is '%s', network is '%s'" % (subnet, network))
 
         if subnet is None:
             subnet = {}

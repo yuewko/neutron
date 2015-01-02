@@ -80,9 +80,10 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         if self.infoblox.network_exists(cfg.network_view, subnet['cidr']):
             create_subnet_flow.add(tasks.ChainInfobloxNetworkTask())
             create_infoblox_member = False
-        else:
-            infoblox_db.set_network_view(context, cfg.network_view,
-                                         s['network_id'])
+
+        if not infoblox_db.get_network_view(context, subnet['network_id']):
+            infoblox_db.set_network_view(context, cfg.network_view, 
+                                         subnet['network_id'])
 
         # Neutron will sort this later so make sure infoblox copy is
         # sorted too.

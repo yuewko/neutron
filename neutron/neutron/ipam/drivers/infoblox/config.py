@@ -324,6 +324,18 @@ class Config(object):
             raise exceptions.OperationNotAllowed(
                 reason="subnet_name is in domain name pattern")
 
+        if subnet_new.get('network') and subnet_new.get('network_before'):
+            network_new_name = subnet_new.get('network').get('name')
+            network_name = subnet_new.get('network_before').get('name')
+            update_allowed = not (network_name is not None and
+                                  network_new_name is not None and
+                                  network_name != network_new_name and
+                                  '{network_name}' in pattern)
+
+            if not update_allowed:
+                raise exceptions.OperationNotAllowed(
+                    reason="network_name is in domain name pattern")
+
     def _get_members(self, member_type):
         members = self.member_manager.find_members(
             self.context, self.network_view, member_type)

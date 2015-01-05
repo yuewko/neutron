@@ -993,8 +993,10 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         is_external = network.get('network').get('router:external')
         if not is_external:
             is_external = False
+        network_before = {}
         with context.session.begin(subtransactions=True):
             network = self._get_network(context, id)
+            network_before['name'] = self._get_network(context, id).get('name')
             # validate 'shared' parameter
             if 'shared' in n:
                 self._validate_shared_update(context, id, network, n)
@@ -1005,6 +1007,8 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             for subnet in subnets:
                 subnet['shared'] = network['shared']
                 subnet['external'] = is_external
+                subnet['network'] = n
+                subnet['network_before'] = network_before
                 self.ipam.update_subnet(context, subnet['id'], subnet)
         return self._make_network_dict(network)
 

@@ -302,7 +302,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             self.infoblox.update_network_options(net)
 
     def create_network(self, context, network):
-        if neutron_conf.CONF.dhcp_relay_management_network is None:
+        if not neutron_conf.CONF.dhcp_relay_management_network:
             LOG.info(_('dhcp_relay_management_network option is not set in '
                        'config. DHCP will be used for management network '
                        'interface.'))

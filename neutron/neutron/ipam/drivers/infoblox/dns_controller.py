@@ -93,7 +93,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             self.infoblox.update_dns_record_eas(cfg.dns_view,
                                                 ip_address.floating_ip_address,
                                                 extattrs)
-            if cfg.CONF.use_host_records_for_ip_allocation:
+            if neutron_conf.CONF.use_host_records_for_ip_allocation:
                 self.infoblox.update_host_record_eas(cfg.dns_view,
                                                 ip_address.floating_ip_address,
                                                 extattrs)

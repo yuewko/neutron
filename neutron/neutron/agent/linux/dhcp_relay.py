@@ -366,7 +366,7 @@ class DnsDhcpProxyDeviceManager(dhcp.DeviceManager):
                              bridge=relay_bridge)
 
             use_static_ip_allocation = (
-                self.conf.dhcp_relay_management_network is not None
+                self.conf.dhcp_relay_management_network
                 and hasattr(network, MGMT_INTERFACE_IP_ATTR))
 
             if use_static_ip_allocation:

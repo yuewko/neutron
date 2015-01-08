@@ -118,8 +118,8 @@ class Infoblox(object):
             raise ValueError('WAPI object type can\'t have slash.')
 
     @reraise_neutron_exception
-    def get_object(self, nios_object, payload=None, return_fields=None,
-                   extattrs=None):
+    def get_object(self, nios_object, payload={}, return_fields=[],
+                   extattrs={}):
         """
         Retrieve a list of Infoblox objects of NIOS object <nios_object>
         Args:

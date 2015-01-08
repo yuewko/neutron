@@ -140,7 +140,11 @@ class Infoblox(object):
 
         self._validate_objtype_or_die(nios_object, objtype_expected=False)
 
-        query_params = payload
+        if payload is None:
+            query_params = {}
+        else:
+            query_params = payload
+
         if return_fields:
             query_params['_return_fields'] = ','.join(return_fields)
 

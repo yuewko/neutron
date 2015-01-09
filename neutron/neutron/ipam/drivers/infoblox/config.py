@@ -188,7 +188,7 @@ class Config(object):
         self._cached_network_view = None
 
         self._net_view = config_dict.get('network_view', 'default')
-        self._dns_view = config_dict.get('dns_view')
+        self._dns_view = config_dict.get('dns_view', 'default')
 
         self.require_dhcp_relay = config_dict.get('require_dhcp_relay', False)
 
@@ -262,12 +262,10 @@ class Config(object):
 
     @property
     def dns_view(self):
-        if self._dns_view:
+        if self.network_view == 'default':
             return self._dns_view
 
-        if self.network_view and self.network_view != 'default':
-            return '.'.join(['default', self.network_view])
-        return 'default'
+        return '.'.join([self._dns_view, self.network_view])
 
     @property
     def dhcp_members(self):

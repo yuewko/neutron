@@ -150,7 +150,7 @@ class PatternBuilder(object):
             pattern_dict['port_id'] = port['id']
             pattern_dict['instance_id'] = port['device_id']
 
-            nm = nova_manager.NovaManager(port['tenant_id'])
+            nm = nova_manager.NovaManager()
             pattern_dict['instance_name'] = nm.get_instance_name_by_id(
                 port['device_id'])
 

@@ -19,5 +19,6 @@ NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP = {
     neutron_constants.DEVICE_OWNER_DHCP: 'dhcp-port-{ip_address}',
     neutron_constants.DEVICE_OWNER_ROUTER_INTF: 'router-iface-{ip_address}',
     neutron_constants.DEVICE_OWNER_ROUTER_GW: 'router-gw-{ip_address}',
+    neutron_constants.DEVICE_OWNER_FLOATINGIP: 'floating-ip-{ip_address}',
     'neutron:' + plugins_constants.LOADBALANCER: 'lb-vip-{ip_address}',
 }

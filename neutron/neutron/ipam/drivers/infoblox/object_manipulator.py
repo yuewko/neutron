@@ -270,10 +270,11 @@ class InfobloxObjectManipulator(object):
         # Forward mapping
         if 'record:a' in bind_list:
             payload = {
+                'ipv4addr': ip,
                 'name': name,
                 'view': dnsview_name
             }
-            additional_create_kwargs = {'ipv4addr': ip}
+            additional_create_kwargs = {}
             self._create_infoblox_object('record:a', payload,
                                          additional_create_kwargs,
                                          check_if_exists=True)
@@ -281,10 +282,11 @@ class InfobloxObjectManipulator(object):
             # Reverse mapping
         if 'record:ptr' in bind_list:
             record_ptr_data = {
+                'ipv4addr': ip,
                 'ptrdname': name,
                 'view': dnsview_name
             }
-            additional_create_kwargs = {'ipv4addr': ip}
+            additional_create_kwargs = {}
             self._create_infoblox_object('record:ptr', record_ptr_data,
                                          additional_create_kwargs,
                                          check_if_exists=True)

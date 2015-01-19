@@ -95,7 +95,7 @@ class InfobloxEaManager(object):
         os_user_id = context.user_id
 
         neutron_internal_services_dev_owners = \
-            ib_constants.NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP.keys()
+            ib_constants.NEUTRON_INTERNAL_SERVICE_DEVICE_OWNERS
 
         set_os_instance_id = (port['device_owner'] not in
                               neutron_internal_services_dev_owners)

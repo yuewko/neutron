@@ -22,3 +22,10 @@ NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP = {
     neutron_constants.DEVICE_OWNER_FLOATINGIP: 'floating-ip-{ip_address}',
     'neutron:' + plugins_constants.LOADBALANCER: 'lb-vip-{ip_address}',
 }
+
+NEUTRON_INTERNAL_SERVICE_DEVICE_OWNERS = [
+    neutron_constants.DEVICE_OWNER_DHCP,
+    neutron_constants.DEVICE_OWNER_ROUTER_INTF,
+    neutron_constants.DEVICE_OWNER_ROUTER_GW,
+    'neutron:' + plugins_constants.LOADBALANCER
+]

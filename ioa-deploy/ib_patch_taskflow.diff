@@ -1,0 +1,33 @@
+--- taskflow/exceptions.py.org	2014-09-16 16:06:01.375163921 -0400
++++ taskflow/exceptions.py	2014-09-16 16:05:55.539109578 -0400
+@@ -16,6 +16,7 @@
+ #    License for the specific language governing permissions and limitations
+ #    under the License.
+ 
++import six
+ 
+ class TaskFlowException(Exception):
+     """Base class for exceptions emitted from this library."""
+@@ -137,3 +138,10 @@
+ 
+     def __str__(self):
+         return 'WrappedFailure: %s' % [str(cause) for cause in self._causes]
++
++def exception_message(exc):
++    """Return the string representation of exception."""
++    try:
++        return six.text_type(exc)
++    except UnicodeError:
++        return str(exc)
+--- taskflow/utils/misc.py.orig	2014-09-16 16:05:29.997871748 -0400
++++ taskflow/utils/misc.py	2014-09-16 16:05:24.004815943 -0400
+@@ -403,7 +403,7 @@
+                 reflection.get_all_class_names(exc_info[0], up_to=Exception))
+             if not self._exc_type_names:
+                 raise TypeError('Invalid exception type: %r' % exc_info[0])
+-            self._exception_str = str(self._exc_info[1])
++            self._exception_str = exceptions.exception_message(self._exc_info[1])
+             self._traceback_str = ''.join(
+                 traceback.format_tb(self._exc_info[2]))
+         else:
+

@@ -1,0 +1,17 @@
+# OpenStack release name to install
+###############################################################
+export OPENSTACK_RELEASE=icehouse
+
+# DEPLOYMENT_SERVICES identifies what components to install
+#    ioa:       install Infoblox OpenStack Adapter
+#    ioa_patch: patch neutron code and runs db migration only
+# 
+# If you want to deploy Infoblox OpenStack Adapter,
+#    DEPLOYMENT_SERVICES=ioa
+###############################################################
+export DEPLOYMENT_SERVICES=ioa
+
+# Configure this only if you want to configure HOSTNAME in /etc/sysconfig/network
+# and add local ip with HOST_NAME below in /etc/hosts
+# If hostname change is not needed, leave it blank
+export HOST_NAME=

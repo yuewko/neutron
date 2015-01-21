@@ -1,0 +1,37 @@
+# STACK_DEPLOYMENT_TYPE identifies whether to install openstack in
+# a single node or multi nodes.
+#
+# Available option is: 'single' or 'multi'.
+#
+# If 'multi' nodes option is selected, STACK_NODE_IP_ADDRESSES
+# must be configured. At least two IPs are required.
+# The first IP will be a controller node and the rest will be
+# compute nodes.
+###############################################################
+export STACK_DEPLOYMENT_TYPE=single
+#export STACK_NODE_IP_ADDRESSES=
+
+# Package dependency
+# Identify all the required packages
+###############################################################
+export PACKAGES="gcc crudini python-pbr python-Paste python-PasteDeploy python-Routes python-anyjson python-argparse python-Babel python-eventlet python-greenlet python-httplib2 python-requests python-iso8601 python-jsonrpclib python-Jinja2 python-kombu python-netaddr python-neutronclient python-SQLAlchemy python-WebOb python-keystoneclient python-alembic python-six python-stevedore python-oslo.config python-oslo.rootwrap python-novaclient python-taskflow"
+
+# Neutron
+##################################################################################
+export NEUTRON_CONF=/etc/neutron/neutron.conf
+export ML2_PLUGIN_CONF=/etc/neutron/plugins/ml2/ml2_conf.ini
+export OVS_PLUGIN_CONF=/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini
+export DHCP_AGENT_CONF=/etc/neutron/dhcp_agent.ini
+export L3_AGENT_CONF=/etc/neutron/l3_agent.ini
+
+export NEUTRON_PLUGIN=ml2
+
+export NEUTRON_PLUGIN_INI=''
+if [ -e /etc/sysconfig/neutron ]
+then
+        NEUTRON_PLUGIN_INI=`. /etc/sysconfig/neutron; echo $NEUTRON_PLUGIN_CONF`
+fi
+if [ -z $NEUTRON_PLUGIN_INI ]
+then
+	NEUTRON_PLUGIN_INI="/etc/neutron/plugins/ml2/ml2_conf.ini"
+fi

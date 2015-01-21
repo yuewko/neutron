@@ -1,0 +1,68 @@
+# DHCP Relay
+##################################################################################
+export DHCP_FILTERS_CONF=/usr/share/neutron/rootwrap/dhcp.filters
+export DHCP_CONFS=/var/lib/neutron/dhcp
+export DHCP_RELAY_PACKAGE=dhcp-4.3.0_patched.tar.gz
+export DHCP_RELAY_PATH=/usr/local/dhcp-4.3.0
+export DHCP_RELAY_BIN_PATH=$DHCP_RELAY_PATH/sbin
+
+# IOA
+##################################################################################
+export IB_NEUTRON_PATCH_PATH=$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)
+export IB_NEUTRON_TARBALL=neutron.tar.gz
+
+# NIOS API URL
+export WAPI='https://10.39.12.124/wapi/v1.4.1/'
+
+# NIOS credentials
+export IB_USERNAME='admin'
+export IB_PASSWORD='infoblox'
+
+# Subnet FQDN suffix
+export IB_FQDN_SUFFIX='cloud.global.com'
+
+# Members to use
+# One member example:
+export IB_MEMBERS='[{"ipv4addr": "10.39.12.145", "name": "member1.net"}]'
+# For multiple and public network members refer to “Configuration options
+
+# Network view name variables
+export IB_EXTERNAL_NETWORK_VIEW='default'
+export IB_PRIVATE_NETWORK_VIEW='default'
+export IB_PRIVATE_DNS_VIEW='default'
+
+# DHCP Option
+# used to choose between host records or fixed address objects, by default it is set to True,
+# so if you skip this option, neutron adapter will use host record objects.
+# If you’re testing creation of fixed address objects, you’d need to set this option explicitly to False.
+export IB_DHCP_USE_HOST_RECORD_FOR_IP_ALLOC=true
+export IB_BIND_DNS_RECORDS_TO_FIXED_ADDRESS=record:a,record:ptr
+export IB_UNBIND_DNS_RECORDS_FROM_FIXED_ADDRESS=record:a,record:ptr
+export IB_DELETE_DNS_RECORDS_ASSOCIATED_WITH_FIXED_ADDRESS=record:a,record:ptr,record:txt
+
+# IOA Deployment Customization
+##################################################################################
+IOA_SKIP_RELAY=true
+IOA_SKIP_IPV6_DISABLING=false
+IOA_SKIP_PACKAGE_INSTALL=false
+IOA_SKIP_NEUTRON_DB_UPDATE=false
+IOA_SKIP_NETWORK_CONFIGURATION=true
+IOA_NUAGE_DB_MIGRATION_SUPPORT=false
+
+# IOA network configuration
+# No need to configure this if IOA_SKIP_NETWORK_CONFIGURATION is set to true
+##################################################################################
+export IOA_HOST_IP=10.32.10.10
+export IOA_HOST_GATEWAY=10.32.0.1
+export IOA_HOST_NETMASK=255.255.0.0
+export IOA_HOST_DNS=10.102.3.50
+export IOA_INTERFACE=eth0
+
+# You must specify this if IOA_SKIP_RELAY is set to False
+# The configuration is ignored if IOA_SKIP_RELAY is set to true
+# If IOA_SKIP_NETWORK_CONFIGURATION is set to False, IOA_INTERFACE will be
+# bound to IOA_BRIDGE.
+##################################################################################
+export IOA_BRIDGE=br-ex
+export IOA_DHCP_RELAY_MANAGEMENT_NETWORK=
+export IOA_DHCP_RELAY_MANAGEMENT_NETWORK_VIEW=

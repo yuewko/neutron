@@ -1,0 +1,27 @@
+# STACK_DEPLOYMENT_TYPE identifies whether to install openstack in
+# a single node or multi nodes.
+#
+# Available option is: 'single' or 'multi'.
+#
+# If 'multi' nodes option is selected, STACK_NODE_IP_ADDRESSES
+# must be configured. At least two IPs are required.
+# The first IP will be a controller node and the rest will be
+# compute nodes.
+###############################################################
+export STACK_DEPLOYMENT_TYPE=single
+#export STACK_NODE_IP_ADDRESSES=
+
+# Package dependency 
+# Identify all the required packages
+###############################################################
+export PACKAGES="expect python-devel mysql-devel gcc openstack-neutron-ml2 libxml2-devel libxslt-devel openstack-packstack wget"
+
+# Neutron
+##################################################################################
+export NEUTRON_CONF=/etc/neutron/neutron.conf
+export ML2_PLUGIN_CONF=/etc/neutron/plugins/ml2/ml2_conf.ini
+export OVS_PLUGIN_CONF=/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini
+export DHCP_AGENT_CONF=/etc/neutron/dhcp_agent.ini
+export L3_AGENT_CONF=/etc/neutron/l3_agent.ini
+
+export NEUTRON_PLUGIN=ml2

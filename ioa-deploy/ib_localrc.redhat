@@ -1,0 +1,32 @@
+# RH Subscription
+###############################################################
+export RH_USER=
+export RH_PASSWORD=
+
+# OpenStack release name to install
+###############################################################
+export OPENSTACK_RELEASE=icehouse
+
+# This is just convenience purpose for development and testing
+# Default is 'false'. Change to 'true' only if you want to
+# skip subscription and repo channel update because you 
+# have already done this step before.
+###############################################################
+# this is used only when you are done with subscription and repo update during testing or initial setup
+# added these flags to skip these processes in order to speed up.
+export SKIP_SUBSCRIPTION_CHECK=false
+export SKIP_REPOS_UPDATE=false
+
+# DEPLOYMENT_SERVICES identifies what components to install
+#    stack:     install stack
+#    ioa:       install Infoblox OpenStack Adapter
+# 
+# If you want to deploy both OpenStack and Infoblox OpenStack Adapter,
+#    DEPLOYMENT_SERVICES=stack,ioa
+###############################################################
+export DEPLOYMENT_SERVICES=ioa
+
+# Configure this only if you want to configure HOSTNAME in /etc/sysconfig/network
+# and add local ip with HOST_NAME below in /etc/hosts
+# If hostname change is not needed, leave it blank
+export HOST_NAME=

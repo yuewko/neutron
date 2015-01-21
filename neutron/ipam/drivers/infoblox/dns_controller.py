@@ -79,8 +79,9 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         self.pattern_builder = config.PatternBuilder
 
     def disassociate_floatingip(self, context, ip_address, port_id):
-        subs = infoblox_db.get_subnets_by_port(context, port_id)
-        port = infoblox_db.get_port_by_id(context, port_id)
+        floating_port_id = ip_address.get('floating_port_id')
+        subs = infoblox_db.get_subnets_by_port(context, floating_port_id)
+        port = infoblox_db.get_port_by_id(context, floating_port_id)
         extattrs = self.ea_manager.get_extattrs_for_ip(context, port)
         del extattrs['VM ID']
 

@@ -25,8 +25,10 @@ class InfobloxObjectManipulator(object):
     def __init__(self, connector):
         self.connector = connector
 
-    def create_network_view(self, netview_name):
-        net_view_data = {'name': netview_name}
+    def create_network_view(self, netview_name, nview_extattrs):
+        net_view_data = {
+            'name': netview_name,
+            'extattrs': nview_extattrs}
         return self._create_infoblox_object('networkview', net_view_data)
 
     def create_dns_view(self, net_view_name, dns_view_name):
@@ -79,9 +81,11 @@ class InfobloxObjectManipulator(object):
         return self._create_infoblox_object('network', network_data,
                                             check_if_exists=False)
 
-    def create_ip_range(self, network_view, start_ip, end_ip, disable):
+    def create_ip_range(self, network_view, start_ip, end_ip, disable,
+                        range_extattrs):
         range_data = {'start_addr': start_ip,
                       'end_addr': end_ip,
+                      'extattrs': range_extattrs,
                       'network_view': network_view}
         ib_object = self._get_infoblox_object_or_none('range', range_data)
 
@@ -91,20 +95,21 @@ class InfobloxObjectManipulator(object):
                                          check_if_exists=False)
 
     def create_host_record_for_given_ip(self, dns_view_name, zone_auth,
-                                        hostname, mac, ip):
+                                        hostname, mac, ip, extattrs):
         hr = objects.HostRecordIPv4()
         hr.hostname = hostname
         hr.zone_auth = zone_auth
         hr.mac = mac
         hr.dns_view = dns_view_name
         hr.ip = ip
+        hr.extattrs = extattrs
 
         created_hr = self._create_infoblox_ip_address(hr)
         return created_hr
 
     def create_host_record_from_range(self, dns_view_name, network_view_name,
                                       zone_auth, hostname, mac, first_ip,
-                                      last_ip):
+                                      last_ip, extattrs):
         hr = objects.HostRecordIPv4()
 
         hr.hostname = hostname
@@ -113,6 +118,7 @@ class InfobloxObjectManipulator(object):
         hr.dns_view = dns_view_name
         hr.ip = objects.IPAllocationObject.next_available_ip_from_range(
             network_view_name, first_ip, last_ip)
+        hr.extattrs = extattrs
 
         created_hr = self._create_infoblox_ip_address(hr)
         return created_hr
@@ -347,10 +353,11 @@ class InfobloxObjectManipulator(object):
 
     def create_dns_zone(self, dns_view, dns_zone_fqdn, primary_dns_member=None,
                         secondary_dns_members=None, zone_format=None,
-                        ns_group=None, prefix=None):
+                        ns_group=None, prefix=None, zone_extattrs={}):
         # TODO(mirantis) support IPv6
         dns_zone_data = {'fqdn': dns_zone_fqdn,
-                         'view': dns_view}
+                         'view': dns_view,
+                         'extattrs': zone_extattrs}
         additional_create_kwargs = {}
         if primary_dns_member:
             grid_primary = [{'name': primary_dns_member.name,
@@ -500,7 +507,12 @@ class InfobloxObjectManipulator(object):
 
     def _get_infoblox_object_or_none(self, obj_type, payload,
                                      return_fields=None):
-        ib_object = self.connector.get_object(obj_type, payload, return_fields)
+        # Ignore 'extattrs' for get_object, since this field is not searchible
+        search_payload = {}
+        for key in payload:
+            if key is not 'extattrs':
+                search_payload[key] = payload[key]
+        ib_object = self.connector.get_object(obj_type, search_payload, return_fields)
         if ib_object:
             if return_fields:
                 return ib_object[0]

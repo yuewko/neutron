@@ -116,13 +116,13 @@ class HostRecordIPAllocator(IPAllocator):
         else:
             hr = self.infoblox.create_host_record_from_range(
                 dnsview_name, networkview_name, zone_auth, hostname, mac,
-                first_ip, last_ip)
+                first_ip, last_ip, extattrs)
         return hr.ips[-1].ip
 
     def allocate_given_ip(self, netview_name, dnsview_name, zone_auth,
                           hostname, mac, ip, extattrs=None):
         hr = self.infoblox.create_host_record_for_given_ip(
-            dnsview_name, zone_auth, hostname, mac, ip)
+            dnsview_name, zone_auth, hostname, mac, ip, extattrs)
         return hr.ips[-1].ip
 
     def deallocate_ip(self, network_view, dns_view_name, ip):

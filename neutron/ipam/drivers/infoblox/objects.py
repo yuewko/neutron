@@ -239,6 +239,7 @@ class HostRecordIPv4(IPAllocationObject):
         self.ref = None
         self.name = None
         self.dns_view = None
+        self.extattrs = None
 
     def __repr__(self):
         return "HostRecord({})".format(self.to_dict())
@@ -296,11 +297,13 @@ class HostRecordIPv4(IPAllocationObject):
         return {
             'view': self.dns_view,
             'name': '.'.join([self.hostname, self.zone_auth]),
+            'extattrs': self.extattrs,
             'ipv4addrs': [ip.to_dict() for ip in self.ips]
         }
 
     return_fields = [
         'ipv4addrs',
+        'extattrs'
     ]
 
     @staticmethod
@@ -317,6 +320,7 @@ class HostRecordIPv4(IPAllocationObject):
         host_record.zone_auth = dns_zone
         host_record.ref = hr_dict.get('_ref')
         host_record.ips = [IPv4.from_dict(ip) for ip in ipv4addrs]
+        host_record.extattrs = hr_dict.get('extattrs')
 
         return host_record
 

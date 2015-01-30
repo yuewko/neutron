@@ -82,7 +82,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             create_infoblox_member = False
 
         if not infoblox_db.get_network_view(context, subnet['network_id']):
-            infoblox_db.set_network_view(context, cfg.network_view, 
+            infoblox_db.set_network_view(context, cfg.network_view,
                                          subnet['network_id'])
 
         # Neutron will sort this later so make sure infoblox copy is
@@ -96,8 +96,11 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         nameservers = [item.ip for item in dns_members]
         nameservers += user_nameservers
 
+        nview_extattrs = self.ea_manager.get_extattrs_for_nview(context)
         network_extattrs = self.ea_manager.get_extattrs_for_network(
             context, subnet, network)
+        range_extattrs = self.ea_manager.get_extattrs_for_range(
+            context, network)
         method_arguments = {'obj_manip': self.infoblox,
                             'net_view_name': cfg.network_view,
                             'dns_view_name': cfg.dns_view,
@@ -106,7 +109,9 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                             'gateway_ip': subnet['gateway_ip'],
                             'disable': True,
                             'nameservers': nameservers,
+                            'range_extattrs': range_extattrs,
                             'network_extattrs': network_extattrs,
+                            'nview_extattrs': nview_extattrs,
                             'related_members': set(cfg.dhcp_members +
                                                    cfg.dns_members),
                             'dhcp_trel_ip': infoblox_db.get_management_net_ip(

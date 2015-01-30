@@ -93,6 +93,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/v1.1/network',
                 data='{"ip": "0.0.0.0"}',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -110,6 +111,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 data='{"ip": "0.0.0.0", "extattrs": {"Subnet ID":'
                      ' {"value": "fake_subnet_id"}}}',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -126,6 +128,50 @@ class TestInfobloxConnector(base.BaseTestCase):
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/v1.1/network?ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
+                verify=False
+            )
+
+    def test_get_object_in_cloud(self):
+        self.config(infoblox_wapi='https://infoblox.example.org/wapi/v2.0/')
+        self.connector = connector.Infoblox()
+
+        objtype = 'network'
+        payload = {'ip': '0.0.0.0'}
+
+        with patch.object(requests.Session, 'get',
+                          return_value=mock.Mock()) as patched_get:
+            patched_get.return_value.status_code = 200
+            patched_get.return_value.content = '{}'
+            self.connector.get_object(objtype, payload)
+            patched_get.assert_called_once_with(
+                'https://infoblox.example.org/wapi/v2.0/network?ip=0.0.0.0'
+                '&_proxy_search=GM',
+                headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
+                verify=False
+            )
+
+    def test_get_objects_with_extattrs_in_cloud(self):
+        self.config(infoblox_wapi='https://infoblox.example.org/wapi/v2.0/')
+        self.connector = connector.Infoblox()
+
+        objtype = 'network'
+        payload = {'ip': '0.0.0.0'}
+        extattrs = {
+            'Subnet ID': {'value': 'fake_subnet_id'}
+        }
+        with patch.object(requests.Session, 'get',
+                          return_value=mock.Mock()) as patched_get:
+            patched_get.return_value.status_code = 200
+            patched_get.return_value.content = '{}'
+            self.connector.get_object(objtype, payload, extattrs=extattrs)
+            patched_get.assert_called_once_with(
+                'https://infoblox.example.org/wapi/'
+                'v2.0/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0'
+                '&_proxy_search=GM',
+                headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -144,6 +190,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/'
                 'v1.1/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -161,6 +208,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/v1.1/network',
                 data='{"ip": "0.0.0.0"}',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -192,3 +240,22 @@ class TestInfobloxConnector(base.BaseTestCase):
             f.side_effect = exc
             self.assertRaises(exceptions.InfobloxConnectionError,
                               connector.reraise_neutron_exception(f))
+
+    def test_non_cloud_api_detection(self):
+        wapi_not_cloud = ('https://infoblox.example.org/wapi/v1.4.1/',
+                          'https://infoblox.example.org/wapi/v1.9/',
+                          'https://wapi.wapi.wap/wapi/v1.99/')
+
+        for url in wapi_not_cloud:
+            print url
+            self.assertFalse(self.connector.is_cloud_wapi(url))
+
+    def test_cloud_api_detection(self):
+        wapi_cloud = ('https://infoblox.example.org/wapi/v2.1/',
+                      'https://infoblox.example.org/wapi/v2.0/',
+                      'https://wapi.wapi.wap/wapi/v2.0.1/',
+                      'https://wapi.wapi.wap/wapi/v3.0/',
+                      'https://wapi.wapi.wap/wapi/v11.0.1/')
+
+        for url in wapi_cloud:
+            self.assertTrue(self.connector.is_cloud_wapi(url))

@@ -166,12 +166,14 @@ class DomainZoneTestCase(base.BaseTestCase):
                 [call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       expected_member,
-                                      mock.ANY),
+                                      mock.ANY,
+                                      zone_extattrs=mock.ANY),
                  call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       expected_member,
                                       mock.ANY,
                                       prefix=mock.ANY,
+                                      zone_extattrs=mock.ANY,
                                       zone_format=mock.ANY)
                  ])
 
@@ -205,12 +207,14 @@ class DomainZoneTestCase(base.BaseTestCase):
                 [call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       primary_dns_member,
-                                      secondary_dns_members),
+                                      secondary_dns_members,
+                                      zone_extattrs=mock.ANY),
                  call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       primary_dns_member,
                                       secondary_dns_members,
                                       prefix=mock.ANY,
+                                      zone_extattrs=mock.ANY,
                                       zone_format=mock.ANY)
                  ])
 
@@ -241,12 +245,14 @@ class DomainZoneTestCase(base.BaseTestCase):
                 [call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
-                                      mock.ANY),
+                                      mock.ANY,
+                                      zone_extattrs=mock.ANY),
                  call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
                                       prefix=subnet['name'],
+                                      zone_extattrs=mock.ANY,
                                       zone_format=mock.ANY)
                  ])
 
@@ -277,12 +283,14 @@ class DomainZoneTestCase(base.BaseTestCase):
                 [call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
-                                      mock.ANY),
+                                      mock.ANY,
+                                      zone_extattrs=mock.ANY),
                  call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
                                       prefix=None,
+                                      zone_extattrs=mock.ANY,
                                       zone_format=mock.ANY)
                  ])
 
@@ -312,7 +320,7 @@ class DomainZoneTestCase(base.BaseTestCase):
                                       call.delete_dns_zone(expected_dns_view,
                                                            subnet['cidr'])]
 
-    def test_only_subnet_dns_zone_is_deleted_when_global_dns_zone_used(self):
+    def test_no_dns_zone_is_deleted_when_global_dns_zone_used(self):
         manip = mock.Mock()
         context = mock.Mock()
         subnet = {'network_id': 'some-id',
@@ -325,4 +333,4 @@ class DomainZoneTestCase(base.BaseTestCase):
         dns_ctrlr.pattern_builder = mock.Mock()
         dns_ctrlr.delete_dns_zones(context, subnet)
 
-        manip.delete_dns_zone.assert_called_once_with(mock.ANY, subnet['cidr'])
+        assert not manip.delete_dns_zone.called

@@ -20,8 +20,8 @@ from neutron.ipam.drivers.infoblox import exceptions
 
 
 class CreateNetViewTask(task.Task):
-    def execute(self, obj_manip, net_view_name):
-        obj_manip.create_network_view(net_view_name)
+    def execute(self, obj_manip, net_view_name, nview_extattrs):
+        obj_manip.create_network_view(net_view_name, nview_extattrs)
 
     def revert(self, obj_manip, net_view_name, **kwargs):
         if not obj_manip.has_networks(net_view_name):
@@ -73,8 +73,10 @@ class CreateNetworkFromTemplateTask(task.Task):
 
 
 class CreateIPRange(task.Task):
-    def execute(self, obj_manip, net_view_name, start_ip, end_ip, disable):
-        obj_manip.create_ip_range(net_view_name, start_ip, end_ip, disable)
+    def execute(self, obj_manip, net_view_name, start_ip, end_ip, disable,
+                range_extattrs):
+        obj_manip.create_ip_range(net_view_name, start_ip, end_ip, disable,
+                                  range_extattrs)
 
     def revert(self, obj_manip, net_view_name, start_ip, end_ip, **kwargs):
         obj_manip.delete_ip_range(net_view_name, start_ip, end_ip)
@@ -91,9 +93,10 @@ class CreateDNSViewTask(task.Task):
 
 class CreateDNSZonesTask(task.Task):
     def execute(self, obj_manip, dnsview_name, fqdn, dns_member,
-                secondary_dns_members, **kwargs):
+                secondary_dns_members, zone_extattrs, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, fqdn, dns_member,
-                                  secondary_dns_members)
+                                  secondary_dns_members,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, fqdn, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, fqdn)
@@ -101,19 +104,22 @@ class CreateDNSZonesTask(task.Task):
 
 class CreateDNSZonesTaskCidr(task.Task):
     def execute(self, obj_manip, dnsview_name, cidr, dns_member, zone_format,
-                secondary_dns_members, prefix, **kwargs):
+                secondary_dns_members, prefix, zone_extattrs, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, cidr, dns_member,
                                   secondary_dns_members,
                                   prefix=prefix,
-                                  zone_format=zone_format)
+                                  zone_format=zone_format,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, cidr, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, cidr)
 
 
 class CreateDNSZonesFromNSGroupTask(task.Task):
-    def execute(self, obj_manip, dnsview_name, fqdn, ns_group, **kwargs):
-        obj_manip.create_dns_zone(dnsview_name, fqdn, ns_group=ns_group)
+    def execute(self, obj_manip, dnsview_name, fqdn, ns_group,
+                zone_extattrs, **kwargs):
+        obj_manip.create_dns_zone(dnsview_name, fqdn, ns_group=ns_group,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, fqdn, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, fqdn)
@@ -121,11 +127,12 @@ class CreateDNSZonesFromNSGroupTask(task.Task):
 
 class CreateDNSZonesCidrFromNSGroupTask(task.Task):
     def execute(self, obj_manip, dnsview_name, cidr, ns_group, zone_format,
-                prefix, **kwargs):
+                prefix, zone_extattrs, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, cidr,
                                   ns_group=ns_group,
                                   prefix=prefix,
-                                  zone_format=zone_format)
+                                  zone_format=zone_format,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, cidr, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, cidr)

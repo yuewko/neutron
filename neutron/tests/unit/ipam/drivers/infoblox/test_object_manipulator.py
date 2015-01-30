@@ -63,6 +63,8 @@ class PayloadMatcher(object):
 
 
 class ObjectManipulatorTestCase(base.BaseTestCase):
+    EXT_ATTRS = {'Tenant ID': {'value': '40501209848593'}}
+
     def test_create_net_view_creates_network_view_object(self):
         connector = mock.Mock()
         connector.get_object.return_value = None
@@ -71,13 +73,15 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         ibom = om.InfobloxObjectManipulator(connector)
 
         net_view_name = 'test_net_view_name'
-        ibom.create_network_view(net_view_name)
+        ibom.create_network_view(net_view_name, self.EXT_ATTRS)
 
-        matcher = PayloadMatcher({'name': net_view_name})
+        get_matcher = PayloadMatcher({'name': net_view_name})
+        create_matcher = PayloadMatcher({'name': net_view_name,
+                                         'extattrs': self.EXT_ATTRS})
         connector.get_object.assert_called_once_with(
-            'networkview', matcher, None)
+            'networkview', get_matcher, None)
         connector.create_object.assert_called_once_with(
-            'networkview', matcher, mock.ANY)
+            'networkview', create_matcher, mock.ANY)
 
     def test_create_host_record_creates_host_record_object(self):
         dns_view_name = 'test_dns_view_name'
@@ -97,11 +101,12 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         ibom = om.InfobloxObjectManipulator(connector)
 
         ibom.create_host_record_for_given_ip(dns_view_name, zone_auth,
-                                             hostname, mac, ip)
+                                             hostname, mac, ip, self.EXT_ATTRS)
 
         exp_payload = {
             'name': 'test_hostname.test.dns.zone.com',
             'view': dns_view_name,
+            'extattrs': self.EXT_ATTRS,
             'ipv4addrs': [
                 {'mac': mac, 'configure_for_dhcp': True, 'ipv4addr': ip}
             ]
@@ -133,13 +138,14 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         ibom.create_host_record_from_range(
             dns_view_name, net_view_name, zone_auth, hostname, mac, first_ip,
-            last_ip)
+            last_ip, self.EXT_ATTRS)
 
         next_ip = \
             'func:nextavailableip:192.168.0.1-192.168.0.254,test_net_view_name'
         exp_payload = {
             'name': 'test_hostname.test.dns.zone.com',
             'view': dns_view_name,
+            'extattrs': self.EXT_ATTRS,
             'ipv4addrs': [
                 {'mac': mac, 'configure_for_dhcp': True, 'ipv4addr': next_ip}
             ]
@@ -208,7 +214,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         net_view_name = 'test_dns_view_name'
 
-        ibom.create_network_view(net_view_name)
+        ibom.create_network_view(net_view_name, self.EXT_ATTRS)
 
         matcher = PayloadMatcher({'name': net_view_name})
         connector.get_object.assert_called_once_with(
@@ -307,12 +313,13 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         connector.get_object.return_value = None
 
         ibom = om.InfobloxObjectManipulator(connector)
-        ibom.create_ip_range(net_view, start_ip, end_ip, disable)
+        ibom.create_ip_range(net_view, start_ip, end_ip, disable, self.EXT_ATTRS)
 
-        assert not connector.get_object.called
+        assert connector.get_object.called
         matcher = PayloadMatcher({'start_addr': start_ip,
                                   'end_addr': end_ip,
                                   'network_view': net_view,
+                                  'extattrs': self.EXT_ATTRS,
                                   'disable': disable})
         connector.create_object.assert_called_once_with('range', matcher,
                                                         mock.ANY)
@@ -438,6 +445,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         payload = {'view': dns_view_name,
                    'fqdn': fqdn,
                    'zone_format': zone_format,
+                   'extattrs': {},
                    'grid_primary': [{'name': primary_dns_member.name,
                                      '_struct': 'memberserver'}],
                    'grid_secondaries': [{'name': member.name,
@@ -466,7 +474,8 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         self.assertRaises(exceptions.InfobloxCannotAllocateIp,
                           ibom.create_host_record_for_given_ip,
-                          dns_view_name, zone_auth, hostname, mac, ip)
+                          dns_view_name, zone_auth, hostname, mac, ip,
+                          self.EXT_ATTRS)
 
     def test_create_dns_view_creates_view_object(self):
         net_view_name = 'net-view-name'

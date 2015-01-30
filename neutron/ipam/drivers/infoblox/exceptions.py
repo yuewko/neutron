@@ -179,6 +179,11 @@ class InfobloxConnectionError(exceptions.NeutronException):
 class InfobloxInternalPrivateSubnetAlreadyExist(exceptions.Conflict):
     message = _("Network with the same CIDR already exists on NIOS.")
 
+
 class InfobloxBadWAPICredential(InfobloxException):
     message = _("Infoblox IPAM is misconfigured: "
                 "infoblox_username and infoblox_password are incorrect.")
+
+
+class InfobloxTimeoutError(InfobloxException):
+    message = _("Connection to NIOS timed out")

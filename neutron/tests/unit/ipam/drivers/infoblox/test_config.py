@@ -440,6 +440,7 @@ class ConfigTestCase(base.BaseTestCase):
     def test_subnet_update_not_allowed_if_subnet_name_is_in_pattern(self):
         context = mock.Mock()
         subnet = mock.Mock()
+        subnet_new = mock.Mock()
         member_manager = mock.Mock()
 
         cfg = {
@@ -450,11 +451,12 @@ class ConfigTestCase(base.BaseTestCase):
 
         conf = config.Config(cfg, context, subnet, member_manager)
         self.assertRaises(exceptions.OperationNotAllowed,
-                          conf.verify_subnet_update_is_allowed)
+                          conf.verify_subnet_update_is_allowed, subnet_new)
 
     def test_subnet_update_is_allowed_if_subnet_name_is_not_in_pattern(self):
         context = mock.Mock()
         subnet = mock.Mock()
+        subnet_new = mock.Mock()
         member_manager = mock.Mock()
 
         allowed_suffixes = [
@@ -478,7 +480,7 @@ class ConfigTestCase(base.BaseTestCase):
 
             conf = config.Config(cfg, context, subnet, member_manager)
             try:
-                conf.verify_subnet_update_is_allowed()
+                conf.verify_subnet_update_is_allowed(subnet_new)
             except exceptions.OperationNotAllowed as e:
                 self.fail('Unexpected exception {}'.format(e))
 

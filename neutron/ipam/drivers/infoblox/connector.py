@@ -16,6 +16,7 @@
 #    under the License.
 
 import functools
+import re
 
 from oslo.config import cfg
 import requests
@@ -48,6 +49,9 @@ def reraise_neutron_exception(func):
     def callee(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except req_exc.Timeout as e:
+            LOG.error(e.message)
+            raise exc.InfobloxTimeoutError(e)
         except req_exc.RequestException as e:
             LOG.error(_("HTTP request failed: %s"), e)
             raise exc.InfobloxConnectionError(reason=e)
@@ -62,6 +66,8 @@ class Infoblox(object):
     Defines methods for getting, creating, updating and
     removing objects from an Infoblox server instance.
     """
+    TIMEOUT = 10.0
+    MAX_RETRIES = 3
 
     def __init__(self):
         """
@@ -77,14 +83,25 @@ class Infoblox(object):
         if not self.wapi or not self.username or not self.password:
             raise exc.InfobloxIsMisconfigured()
 
+        self.is_cloud = self.is_cloud_wapi(self.wapi)
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=cfg.CONF.infoblox_http_pool_connections,
+            max_retries=self.MAX_RETRIES,
             pool_maxsize=cfg.CONF.infoblox_http_pool_maxsize)
         self.session.mount('http://', adapter)
         self.session.mount('https://', adapter)
         self.session.auth = (self.username, self.password)
         self.session.verify = self.sslverify
+
+    @staticmethod
+    def is_cloud_wapi(wapi_url):
+        CLOUD_WAPI_MAJOR_VERSION = 2
+        version_match = re.search('\/wapi\/v(\d+)\.(\d+)', wapi_url)
+        if version_match:
+            if int(version_match.group(1)) >= CLOUD_WAPI_MAJOR_VERSION:
+                return True
+        return False
 
     def _construct_url(self, relative_path, query_params=None, extattrs=None):
         if query_params is None:
@@ -147,6 +164,10 @@ class Infoblox(object):
 
         if return_fields:
             query_params['_return_fields'] = ','.join(return_fields)
+        # Add '_proxy_search' flag to workaround time delay
+        # between GM->vConnector sync
+        if self.is_cloud:
+            query_params['_proxy_search'] = 'GM'
 
         headers = {'Content-type': 'application/json'}
 
@@ -154,6 +175,7 @@ class Infoblox(object):
 
         r = self.session.get(url,
                              verify=self.sslverify,
+                             timeout=self.TIMEOUT,
                              headers=headers)
 
         if r.status_code == requests.codes.UNAUTHORIZED:
@@ -198,6 +220,7 @@ class Infoblox(object):
         r = self.session.post(url,
                               data=jsonutils.dumps(payload),
                               verify=self.sslverify,
+                              timeout=self.TIMEOUT,
                               headers=headers)
 
         if r.status_code == requests.codes.UNAUTHORIZED:
@@ -266,6 +289,7 @@ class Infoblox(object):
         r = self.session.put(self._construct_url(ref, query_params),
                              data=jsonutils.dumps(payload),
                              verify=self.sslverify,
+                             timeout=self.TIMEOUT,
                              headers=headers)
 
         if r.status_code == requests.codes.UNAUTHORIZED:

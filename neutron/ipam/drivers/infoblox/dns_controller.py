@@ -157,6 +157,8 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
 
         dns_zone = self.pattern_builder(cfg.domain_suffix_pattern).\
             build(context, backend_subnet)
+        zone_extattrs = self.ea_manager.get_extattrs_for_zone(
+            context, subnet=backend_subnet)
 
         # OS-583: Add prefix only for classless networks
         prefix = backend_subnet['name']
@@ -171,6 +173,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             'cidr': backend_subnet['cidr'],
             'prefix': prefix,
             'zone_format': 'IPV4',
+            'zone_extattrs': zone_extattrs,
             'obj_manip': self.infoblox
         }
         create_dns_zones_flow = linear_flow.Flow('create-dns-zones')

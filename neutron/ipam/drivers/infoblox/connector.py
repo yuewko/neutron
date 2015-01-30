@@ -87,7 +87,6 @@ class Infoblox(object):
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=cfg.CONF.infoblox_http_pool_connections,
-            max_retries=self.MAX_RETRIES,
             pool_maxsize=cfg.CONF.infoblox_http_pool_maxsize)
         self.session.mount('http://', adapter)
         self.session.mount('https://', adapter)

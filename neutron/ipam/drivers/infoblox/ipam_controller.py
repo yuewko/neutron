@@ -317,8 +317,13 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         cidr = neutron_conf.CONF.dhcp_relay_management_network
         mac = ':'.join(['00'] * 6)
 
+        # Note(pbondar): If IP is allocated for dhcp relay (trel interface)
+        # when dhcp relay management network is set,
+        # OpenStack is unware of this so no port to associate with.
+        # In this case, we still need to populate EAs with default values.
+        ip_extattrs = self.ea_manager.get_default_extattrs_for_ip(context)
         created_fixed_address = self.infoblox.create_fixed_address_from_cidr(
-            net_view_name, mac, cidr)
+            net_view_name, mac, cidr, ip_extattrs)
 
         self.ib_db.add_management_ip(context,
                                      network['id'],

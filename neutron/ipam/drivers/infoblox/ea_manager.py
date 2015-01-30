@@ -116,8 +116,24 @@ class InfobloxEaManager(object):
         }
         return self._build_extattrs(attributes)
 
+    def get_default_extattrs_for_ip(self, context):
+        attributes = {
+            'Tenant ID': context.tenant_id,
+            'Account': context.user_id,
+            'Port ID': None,
+            'Port Attached Device - Device Owner': None,
+            'Port Attached Device - Device ID': None,
+            'Cloud API Owned': True,
+            'IP Type': 'Fixed',
+            # Note(pbondar): if VM ID value is passed as None,
+            # NIOS generates exception like VM ID not passed.
+            # So passing it as sting
+            'VM ID': 'None',
+        }
+        return self._build_extattrs(attributes)
+
     def get_extattrs_for_ip(self, context, port):
-        os_tenant_id = port.get('tenant_id')
+        os_tenant_id = port.get('tenant_id') or context.tenant_id
         os_user_id = context.user_id
 
         neutron_internal_services_dev_owners = \
@@ -129,7 +145,7 @@ class InfobloxEaManager(object):
         if set_os_instance_id:
             os_instance_id = self._get_instance_id(context, port)
         else:
-            os_instance_id = None
+            os_instance_id = 'None'
 
         network = self.db.get_network(context, port['network_id'])
         common_ea = self._get_common_ea(context, network=network)
@@ -141,14 +157,13 @@ class InfobloxEaManager(object):
             'Port Attached Device - Device Owner': port['device_owner'],
             'Port Attached Device - Device ID': port['device_id'],
             'Cloud API Owned': common_ea['Cloud API Owned'],
+            'VM ID': os_instance_id,
         }
-        if os_instance_id:
-            attributes['VM ID'] = os_instance_id
 
         if self.db.is_network_external(context, port['network_id']):
-            attributes['IP Type'] = 'FLOATING'
+            attributes['IP Type'] = 'Floating'
         else:
-            attributes['IP Type'] = 'FIXED'
+            attributes['IP Type'] = 'Fixed'
 
         return self._build_extattrs(attributes)
 

@@ -165,8 +165,10 @@ class Infoblox(object):
             query_params['_return_fields'] = ','.join(return_fields)
         # Add '_proxy_search' flag to workaround time delay
         # between GM->vConnector sync
-        if self.is_cloud:
-            query_params['_proxy_search'] = 'GM'
+        # TODO(pbondar): Uncomment proxy logic when retry logic is
+        # implemented. Commented for now because causes a lot of issues.
+        #if self.is_cloud:
+        #    query_params['_proxy_search'] = 'GM'
 
         headers = {'Content-type': 'application/json'}
 

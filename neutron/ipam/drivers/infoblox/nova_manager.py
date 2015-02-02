@@ -23,13 +23,18 @@ LOG = logging.getLogger(__name__)
 
 
 class NovaManager(object):
+    _nova_client = None
+
     def __init__(self):
-        self.nova = nclient.Client(cfg.CONF.nova_admin_username,
-                                   cfg.CONF.nova_admin_password,
-                                   None, #project_id - not actually used
-                                   auth_url=cfg.CONF.nova_admin_auth_url,
-                                   tenant_id=cfg.CONF.nova_admin_tenant_id,
-                                   service_type='compute')
+        if not NovaManager._nova_client:
+            NovaManager._nova_client = nclient.Client(
+                cfg.CONF.nova_admin_username,
+                cfg.CONF.nova_admin_password,
+                None,  # project_id - not actually used
+                auth_url=cfg.CONF.nova_admin_auth_url,
+                tenant_id=cfg.CONF.nova_admin_tenant_id,
+                service_type='compute')
+        self.nova = NovaManager._nova_client
 
     def get_instance_name_by_id(self, instance_id):
         try:

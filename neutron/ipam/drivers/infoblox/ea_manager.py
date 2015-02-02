@@ -22,6 +22,7 @@ from neutron.ipam.drivers.infoblox import connector
 from neutron.ipam.drivers.infoblox import constants as ib_constants
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import l2_driver
+from neutron.ipam.drivers.infoblox import nova_manager
 from neutron.openstack.common import log as logging
 
 
@@ -129,6 +130,7 @@ class InfobloxEaManager(object):
             # NIOS generates exception like VM ID not passed.
             # So passing it as sting
             'VM ID': 'None',
+            'VM Name': '',
         }
         return self._build_extattrs(attributes)
 
@@ -144,8 +146,11 @@ class InfobloxEaManager(object):
 
         if set_os_instance_id:
             os_instance_id = self._get_instance_id(context, port)
+            nm = nova_manager.NovaManager()
+            os_instance_name = nm.get_instance_name_by_id(os_instance_id)
         else:
             os_instance_id = 'None'
+            os_instance_name = ''
 
         network = self.db.get_network(context, port['network_id'])
         common_ea = self._get_common_ea(context, network=network)
@@ -158,6 +163,7 @@ class InfobloxEaManager(object):
             'Port Attached Device - Device ID': port['device_id'],
             'Cloud API Owned': common_ea['Cloud API Owned'],
             'VM ID': os_instance_id,
+            'VM Name': os_instance_name,
         }
 
         if self.db.is_network_external(context, port['network_id']):

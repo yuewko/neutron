@@ -169,12 +169,13 @@ class InfobloxObjectManipulator(object):
         if fa:
             self._update_infoblox_object_by_ref(fa, {'extattrs': extattrs})
 
-    def create_fixed_address_from_cidr(self, network_view, mac, cidr):
+    def create_fixed_address_from_cidr(self, network_view, mac, cidr, extattrs):
         fa = objects.FixedAddress()
         fa.ip = objects.IPAllocationObject.next_available_ip_from_cidr(
             network_view, cidr)
         fa.mac = mac
         fa.net_view = network_view
+        fa.extattrs = extattrs
         created_fa = self._create_infoblox_ip_address(fa)
         return created_fa
 

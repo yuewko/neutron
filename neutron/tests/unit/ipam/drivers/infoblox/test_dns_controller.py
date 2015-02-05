@@ -21,9 +21,9 @@ import taskflow.engines
 from neutron.common import constants as neutron_constants
 from neutron.ipam.drivers.infoblox import dns_controller
 from neutron.ipam.drivers.infoblox import infoblox_ipam
+from neutron.db.infoblox import infoblox_db as infoblox_db
 from neutron.plugins.common import constants as plugins_constants
 from neutron.tests import base
-
 
 class SubstringMatcher(object):
     def __init__(self, names):
@@ -294,6 +294,8 @@ class DomainZoneTestCase(base.BaseTestCase):
                                       zone_format=mock.ANY)
                  ])
 
+    @mock.patch.object(infoblox_db, 'is_network_external',
+                       mock.Mock())
     def test_two_dns_zones_deleted_when_not_using_global_dns_zone(self):
         manip = mock.Mock()
         context = mock.Mock()
@@ -313,6 +315,13 @@ class DomainZoneTestCase(base.BaseTestCase):
         dns_ctrlr = dns_controller.InfobloxDNSController(
             ip_allocator, manip, config_finder)
         dns_ctrlr.pattern_builder = mock.Mock()
+
+        network = {'id': 'some-net-id',
+                   'shared': False}
+        dns_ctrlr._get_network = mock.Mock()
+        dns_ctrlr._get_network.return_value = network
+        infoblox_db.is_network_external.return_value = False
+
         dns_ctrlr.delete_dns_zones(context, subnet)
 
         assert manip.method_calls == [call.delete_dns_zone(expected_dns_view,

@@ -372,19 +372,33 @@ class DnsNameserversTestCase(base.BaseTestCase):
 
 
 class DeleteSubnetTestCase(base.BaseTestCase):
+
+    @mock.patch.object(infoblox_db, 'is_network_external',
+                       mock.Mock())
     def test_ib_network_deleted(self):
         infoblox = mock.Mock()
-        member_conf = mock.MagicMock()
         ip_allocator = mock.Mock()
         context = mock.MagicMock()
+
+        cfg = mock.Mock()
+        cfg.is_global_config = False
+        cfg.dhcp_members = ['member40.com', 'member41.com']
+        cfg.dns_members = ['m1', 'm2', 'm3']
+        config_finder = mock.MagicMock()
+        config_finder.find_config_for_subnet = mock.Mock(return_value=cfg)
 
         cidr = '192.168.0.0/24'
         subnet = mock.MagicMock()
         subnet.__getitem__ = mock.Mock(return_value=cidr)
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
-                                                   member_conf,
+                                                   config_finder,
                                                    ip_allocator)
+        network = {'id': 'some-net-id',
+                   'shared': False}
+        b._get_network = mock.Mock()
+        b._get_network.return_value = network
+        infoblox_db.is_network_external.return_value = False
 
         b.delete_subnet(context, subnet)
 
@@ -704,8 +718,9 @@ class CreateNetworkTestCase(base.BaseTestCase):
                                                    ip_allocator, ea_manager)
 
         c.create_network(context, network)
+
         infoblox.create_fixed_address_from_cidr.assert_called_once_with(
-            expected_net_view, expected_mac, cidr)
+            expected_net_view, expected_mac, cidr, mock.ANY)
 
     def test_stores_fixed_address_object_in_db(self):
         infoblox = mock.Mock()

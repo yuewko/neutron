@@ -145,8 +145,7 @@ class TestInfobloxConnector(base.BaseTestCase):
             patched_get.return_value.content = '{}'
             self.connector.get_object(objtype, payload)
             patched_get.assert_called_once_with(
-                'https://infoblox.example.org/wapi/v2.0/network?ip=0.0.0.0'
-                '&_proxy_search=GM',
+                'https://infoblox.example.org/wapi/v2.0/network?ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
                 timeout=self.connector.TIMEOUT,
                 verify=False
@@ -168,8 +167,7 @@ class TestInfobloxConnector(base.BaseTestCase):
             self.connector.get_object(objtype, payload, extattrs=extattrs)
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/'
-                'v2.0/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0'
-                '&_proxy_search=GM',
+                'v2.0/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
                 timeout=self.connector.TIMEOUT,
                 verify=False
@@ -225,9 +223,16 @@ class TestInfobloxConnector(base.BaseTestCase):
                 verify=False
             )
 
-    def test_neutron_exception_is_raised_on_any_request_connection_error(self):
-        supported_exceptions = [req_exc.Timeout,
-                                req_exc.HTTPError,
+    def test_neutron_exception_is_raised_on_any_request_error(self):
+        # timeout exception raises InfobloxTimeoutError
+        f = mock.Mock()
+        f.__name__ = 'mock'
+        f.side_effect = req_exc.Timeout
+        self.assertRaises(exceptions.InfobloxTimeoutError,
+                          connector.reraise_neutron_exception(f))
+
+        # all other request exception raises InfobloxConnectionError
+        supported_exceptions = [req_exc.HTTPError,
                                 req_exc.ConnectionError,
                                 req_exc.ProxyError,
                                 req_exc.SSLError,
@@ -235,8 +240,6 @@ class TestInfobloxConnector(base.BaseTestCase):
                                 req_exc.InvalidURL]
 
         for exc in supported_exceptions:
-            f = mock.Mock()
-            f.__name__ = 'mock'  # functools.wraps need a name of a function
             f.side_effect = exc
             self.assertRaises(exceptions.InfobloxConnectionError,
                               connector.reraise_neutron_exception(f))

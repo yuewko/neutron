@@ -271,13 +271,15 @@ class InfobloxObjectManipulator(object):
         update_kwargs = {'name': name}
         self._update_infoblox_object('record:host', record_host, update_kwargs)
 
-    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list):
+    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list,
+                                extattrs):
         # Forward mapping
         if 'record:a' in bind_list:
             payload = {
                 'ipv4addr': ip,
                 'name': name,
-                'view': dnsview_name
+                'view': dnsview_name,
+                'extattrs':extattrs,
             }
             additional_create_kwargs = {}
             self._create_infoblox_object('record:a', payload,
@@ -289,7 +291,8 @@ class InfobloxObjectManipulator(object):
             record_ptr_data = {
                 'ipv4addr': ip,
                 'ptrdname': name,
-                'view': dnsview_name
+                'view': dnsview_name,
+                'extattrs': extattrs,
             }
             additional_create_kwargs = {}
             self._create_infoblox_object('record:ptr', record_ptr_data,
@@ -302,7 +305,8 @@ class InfobloxObjectManipulator(object):
             'ip_address': ip
         }
         assoc_objects = self._get_infoblox_object_or_none(
-            'ipv4address', assoc_with_ip, return_fields=['objects'])
+            'ipv4address', assoc_with_ip, return_fields=['objects'],
+            proxy=True)
         if assoc_objects:
             return assoc_objects['objects']
 
@@ -507,13 +511,14 @@ class InfobloxObjectManipulator(object):
         return ib_object
 
     def _get_infoblox_object_or_none(self, obj_type, payload,
-                                     return_fields=None):
+                                     return_fields=None, proxy=False):
         # Ignore 'extattrs' for get_object, since this field is not searchible
         search_payload = {}
         for key in payload:
             if key is not 'extattrs':
                 search_payload[key] = payload[key]
-        ib_object = self.connector.get_object(obj_type, search_payload, return_fields)
+        ib_object = self.connector.get_object(obj_type, search_payload,
+                                              return_fields, proxy=proxy)
         if ib_object:
             if return_fields:
                 return ib_object[0]

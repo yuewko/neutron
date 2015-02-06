@@ -135,7 +135,7 @@ class Infoblox(object):
 
     @reraise_neutron_exception
     def get_object(self, nios_object, payload={}, return_fields=[],
-                   extattrs={}):
+                   extattrs={}, proxy=False):
         """
         Retrieve a list of Infoblox objects of NIOS object <nios_object>
         Args:
@@ -163,12 +163,10 @@ class Infoblox(object):
 
         if return_fields:
             query_params['_return_fields'] = ','.join(return_fields)
-        # Add '_proxy_search' flag to workaround time delay
-        # between GM->vConnector sync
-        # TODO(pbondar): Uncomment proxy logic when retry logic is
-        # implemented. Commented for now because causes a lot of issues.
-        #if self.is_cloud:
-        #    query_params['_proxy_search'] = 'GM'
+        # Some get requests like 'ipv4address' should be always
+        # proxified to GM on Hellfire
+        if self.is_cloud and proxy:
+            query_params['_proxy_search'] = 'GM'
 
         headers = {'Content-type': 'application/json'}
 

@@ -127,12 +127,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             fqdn = pattern_builder.build(
                 context, subnet, backend_port, ip_addr)
 
-            binding_func(cfg.dns_view, ip_addr, fqdn)
-            if extattrs:
-                self.ip_allocator.update_extattrs(cfg.network_view,
-                                                  cfg.dns_view,
-                                                  ip_addr,
-                                                  extattrs)
+            binding_func(cfg.dns_view, ip_addr, fqdn, extattrs)
 
         for member in set(all_dns_members):
             self.infoblox.restart_all_services(member)
@@ -147,7 +142,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
                              self.ip_allocator.bind_names, extattrs)
         except exceptions.InfobloxCannotCreateObject as e:
             self.unbind_names(context, backend_port)
-            raise exceptions.InfobloxCannotCreateObject(e)
+            raise e
 
     def unbind_names(self, context, backend_port):
         self._bind_names(context, backend_port, self.ip_allocator.unbind_names)

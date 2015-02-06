@@ -135,7 +135,8 @@ class InfobloxEaManager(object):
         return self._build_extattrs(attributes)
 
     def get_extattrs_for_ip(self, context, port, ignore_instance_id=False):
-        os_tenant_id = port.get('tenant_id') or context.tenant_id
+        # Fallback to 'None' as string since NIOS require this value to be set
+        os_tenant_id = port.get('tenant_id') or context.tenant_id or 'None'
         os_user_id = context.user_id
 
         neutron_internal_services_dev_owners = \
@@ -143,6 +144,7 @@ class InfobloxEaManager(object):
 
         set_os_instance_id = ((not ignore_instance_id) and
             (port['device_owner'] not in neutron_internal_services_dev_owners))
+        os_instance_id = None
 
         if set_os_instance_id:
             # for floating ip, no instance id exists
@@ -150,11 +152,9 @@ class InfobloxEaManager(object):
             if os_instance_id:
                 nm = nova_manager.NovaManager()
                 os_instance_name = nm.get_instance_name_by_id(os_instance_id)
-        else:
-            # for gateway ip, no instance id exists
-            os_instance_id = None;
 
         if not os_instance_id:
+            # for gateway ip, no instance id exists
             os_instance_id = 'None'
             os_instance_name = ''
 

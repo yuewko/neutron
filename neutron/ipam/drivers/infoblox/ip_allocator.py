@@ -67,20 +67,16 @@ class IPAllocator(object):
         pass
 
     @abc.abstractmethod
-    def bind_names(self, dnsview_name, ip, name):
+    def bind_names(self, dnsview_name, ip, name, extattrs):
         pass
 
     @abc.abstractmethod
-    def unbind_names(self, dnsview_name, ip, name):
-        pass
-
-    @abc.abstractmethod
-    def update_extattrs(self, network_view, dns_view, ip, extattrs):
+    def unbind_names(self, dnsview_name, ip, name, extattrs):
         pass
 
 
 class HostRecordIPAllocator(IPAllocator):
-    def bind_names(self, dnsview_name, ip, name):
+    def bind_names(self, dnsview_name, ip, name, extattrs):
         # See OPENSTACK-181. In case hostname already exists on NIOS, update
         # host record which contains that hostname with the new IP address
         # rather than creating a separate host record object
@@ -101,7 +97,7 @@ class HostRecordIPAllocator(IPAllocator):
         else:
             self.infoblox.bind_name_with_host_record(dnsview_name, ip, name)
 
-    def unbind_names(self, dnsview_name, ip, name):
+    def unbind_names(self, dnsview_name, ip, name, extattrs):
         # Nothing to delete, all will be deleted together with host record.
         pass
 
@@ -133,19 +129,15 @@ class HostRecordIPAllocator(IPAllocator):
         else:
             self.infoblox.delete_host_record(dns_view_name, ip)
 
-    def update_extattrs(self, network_view, dns_view, ip, extattrs):
-        self.infoblox.update_host_record_eas(dns_view, ip, extattrs)
-        self.infoblox.update_dns_record_eas(dns_view, ip, extattrs)
-
 
 class FixedAddressIPAllocator(IPAllocator):
-    def bind_names(self, dnsview_name, ip, name):
+    def bind_names(self, dnsview_name, ip, name, extattrs):
         bind_cfg = cfg.CONF.bind_dns_records_to_fixed_address
         if bind_cfg:
             self.infoblox.bind_name_with_record_a(
-                dnsview_name, ip, name, bind_cfg)
+                dnsview_name, ip, name, bind_cfg, extattrs)
 
-    def unbind_names(self, dnsview_name, ip, name):
+    def unbind_names(self, dnsview_name, ip, name, extattrs):
         unbind_cfg = cfg.CONF.unbind_dns_records_from_fixed_address
         if unbind_cfg:
             self.infoblox.unbind_name_from_record_a(
@@ -170,10 +162,6 @@ class FixedAddressIPAllocator(IPAllocator):
             self.infoblox.delete_all_associated_objects(
                 network_view, ip, delete_cfg)
         self.infoblox.delete_fixed_address(network_view, ip)
-
-    def update_extattrs(self, network_view, dns_view, ip, extattrs):
-        self.infoblox.update_fixed_address_eas(network_view, ip, extattrs)
-        self.infoblox.update_dns_record_eas(dns_view, ip, extattrs)
 
 
 def get_ip_allocator(obj_manipulator):

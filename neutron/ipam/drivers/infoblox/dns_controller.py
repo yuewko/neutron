@@ -82,8 +82,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         floating_port_id = ip_address.get('floating_port_id')
         subs = infoblox_db.get_subnets_by_port(context, floating_port_id)
         port = infoblox_db.get_port_by_id(context, floating_port_id)
-        extattrs = self.ea_manager.get_extattrs_for_ip(context, port)
-        del extattrs['VM ID']
+        extattrs = self.ea_manager.get_extattrs_for_ip(context, port, True)
 
         configs = set()
         for subnet in subs:
@@ -139,6 +138,9 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             self.infoblox.restart_all_services(member)
 
     def bind_names(self, context, backend_port):
+        if not backend_port['device_owner']:
+            return
+
         extattrs = self.ea_manager.get_extattrs_for_ip(context, backend_port)
         try:
             self._bind_names(context, backend_port,

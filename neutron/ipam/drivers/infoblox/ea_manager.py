@@ -134,15 +134,15 @@ class InfobloxEaManager(object):
         }
         return self._build_extattrs(attributes)
 
-    def get_extattrs_for_ip(self, context, port):
+    def get_extattrs_for_ip(self, context, port, ignore_instance_id=False):
         os_tenant_id = port.get('tenant_id') or context.tenant_id
         os_user_id = context.user_id
 
         neutron_internal_services_dev_owners = \
             ib_constants.NEUTRON_INTERNAL_SERVICE_DEVICE_OWNERS
 
-        set_os_instance_id = (port['device_owner'] not in
-                              neutron_internal_services_dev_owners)
+        set_os_instance_id = ((not ignore_instance_id) and
+            (port['device_owner'] not in neutron_internal_services_dev_owners))
 
         if set_os_instance_id:
             # for floating ip, no instance id exists

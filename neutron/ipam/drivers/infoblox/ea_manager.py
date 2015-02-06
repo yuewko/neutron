@@ -145,10 +145,16 @@ class InfobloxEaManager(object):
                               neutron_internal_services_dev_owners)
 
         if set_os_instance_id:
+            # for floating ip, no instance id exists
             os_instance_id = self._get_instance_id(context, port)
-            nm = nova_manager.NovaManager()
-            os_instance_name = nm.get_instance_name_by_id(os_instance_id)
+            if os_instance_id:
+                nm = nova_manager.NovaManager()
+                os_instance_name = nm.get_instance_name_by_id(os_instance_id)
         else:
+            # for gateway ip, no instance id exists
+            os_instance_id = None;
+
+        if not os_instance_id:
             os_instance_id = 'None'
             os_instance_name = ''
 

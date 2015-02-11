@@ -14,8 +14,17 @@
 #    under the License.
 import six
 import socket
-
+from oslo.config import cfg
 import neutron.ipam.drivers.infoblox.exceptions as ib_exc
+
+OPTS = [
+    cfg.BoolOpt('use_dhcp_for_ip_allocation_record',
+                default=True,
+                help=_("Used to set 'configure_for_dhcp' option to enable "
+                       " or disable dhcp for host or fixed record"))
+]
+
+cfg.CONF.register_opts(OPTS)
 
 
 def is_valid_ip(ip):
@@ -164,7 +173,7 @@ class IPv4(object):
     def __init__(self, ip=None, mac=None):
         self.ip = ip
         self.mac = mac
-        self.configure_for_dhcp = True
+        self.configure_for_dhcp = cfg.CONF.use_dhcp_for_ip_allocation_record
         self.hostname = None
         self.dns_zone = None
         self.fqdn = None

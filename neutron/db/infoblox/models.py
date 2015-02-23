@@ -26,15 +26,21 @@ DNS_MEMBER_TYPE = 'dns'
 
 
 class InfobloxDNSMember(model_base.BASEV2, models_v2.HasId):
+    __tablename__ = 'infoblox_dns_members'
+
     network_id = sa.Column(sa.String(36), sa.ForeignKey('networks.id',
                                                         ondelete="CASCADE"))
     server_ip = sa.Column(sa.String(40))
+    server_ipv6 = sa.Column(sa.String(40))
 
 
 class InfobloxDHCPMember(model_base.BASEV2, models_v2.HasId):
+    __tablename__ = 'infoblox_dhcp_members'
+
     network_id = sa.Column(sa.String(36), sa.ForeignKey('networks.id',
                                                         ondelete="CASCADE"))
     server_ip = sa.Column(sa.String(40))
+    server_ipv6 = sa.Column(sa.String(40))
 
 
 class InfobloxMemberMap(model_base.BASEV2):
@@ -43,10 +49,11 @@ class InfobloxMemberMap(model_base.BASEV2):
     map_id may point to Network ID, Tenant ID or Infoblox network view name
     depending on configuration. Infoblox member names are unique.
     """
+    __tablename__ = 'infoblox_member_maps'
 
     member_name = sa.Column(sa.String(255), nullable=False, primary_key=True)
     map_id = sa.Column(sa.String(255), nullable=False)
-    member_type = sa.Column(sa.Enum(DHCP_MEMBER_TYPE, DNS_MEMBER_TYPE))
+    member_type = sa.Column(sa.String(10))
 
 
 class InfobloxNetViews(model_base.BASEV2):

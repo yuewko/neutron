@@ -84,7 +84,7 @@ class InfobloxEaManager(object):
         os_physical_network = os_network_l2_info.get('physical_network')
         os_tenant_id = (network.get('tenant_id') or
                         subnet.get('tenant_id') or
-                        context.tenant_id)
+                        context.get('tenant_id'))
         os_user_id = context.user_id
 
         attributes = {

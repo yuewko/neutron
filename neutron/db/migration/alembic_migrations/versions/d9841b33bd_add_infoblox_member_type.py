@@ -42,13 +42,13 @@ def upgrade(active_plugins=None, options=None):
     if not migration.should_run(active_plugins, migration_for_plugins):
         return
 
-    op.add_column('infobloxmembermaps',
-                  sa.Column('member_type', sa.Enum('dhcp', 'dns')))
-    op.execute('UPDATE infobloxmembermaps SET member_type="dhcp"')
+    op.add_column('infoblox_member_maps',
+                  sa.Column('member_type', sa.String(10)))
+    op.execute("UPDATE infoblox_member_maps SET member_type='dhcp'")
 
 
 def downgrade(active_plugins=None, options=None):
     if not migration.should_run(active_plugins, migration_for_plugins):
         return
 
-    op.drop_column('infobloxmembermaps', 'member_type')
+    op.drop_column('infoblox_member_maps', 'member_type')

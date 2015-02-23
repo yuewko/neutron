@@ -495,8 +495,6 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         configured.
 
         :raises: InvalidInput, IpAddressInUse
-
-        TODO(zasimov): refactor this function. Move into IPAM!
         """
         fixed_ip_set = []
         for fixed in fixed_ips:
@@ -608,7 +606,6 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             raise n_exc.InvalidInput(error_message=msg)
 
         # Remove all of the intersecting elements
-        # FIXME(zasimov): OMG! very bad code! copy copy copy!
         for original_ip in original_ips[:]:
             for new_ip in new_ips[:]:
                 if ('ip_address' in new_ip and
@@ -814,7 +811,6 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         return pools
 
     def _get_ports_by_network(self, context, network_id):
-        # FIXME(zasimov): .all() - it's very bad (memory leaks)
         return self._model_query(context, models_v2.Port).filter(
             models_v2.Port.network_id == network_id).all()
 
@@ -1000,7 +996,6 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                 self._validate_shared_update(context, id, network, n)
             network.update(n)
             # also update shared in all the subnets for this network
-            # FIXME(zasimov): move into IPAM
             subnets = self._get_subnets_by_network(context, id)
             for subnet in subnets:
                 subnet['shared'] = network['shared']
@@ -1295,7 +1290,6 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                                   device_owner=p['device_owner'])
             context.session.add(port)
 
-            # TODO(zasimov): Move into IPAM?
             # Update the allocated IP's
             if ips:
                 for ip in ips:

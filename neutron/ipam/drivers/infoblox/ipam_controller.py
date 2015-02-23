@@ -16,6 +16,7 @@
 from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
+from neutron.api.v2 import attributes
 from neutron.db.infoblox import infoblox_db
 from neutron.db.infoblox import models
 from neutron.ipam.drivers.infoblox import config
@@ -87,13 +88,14 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
 
         # Neutron will sort this later so make sure infoblox copy is
         # sorted too.
-        user_nameservers = sorted(dns_controller.get_nameservers(subnet))
+        user_nameservers = sorted(dns_controller.get_nameservers(s))
 
         # For flat network we save member IP as a primary DNS server: to
         # the beginning of the list.
         # If this net is not flat, Member IP will later be replaced by
         # DNS relay IP.
-        nameservers = [item.ip for item in dns_members]
+        nameservers = [item.ipv6 if subnet['ip_version'] == 6
+                                 else item.ip for item in dns_members]
         nameservers += user_nameservers
 
         nview_extattrs = self.ea_manager.get_extattrs_for_nview(context)
@@ -116,12 +118,21 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                                                    cfg.dns_members),
                             'dhcp_trel_ip': infoblox_db.get_management_net_ip(
                                 context,
-                                subnet['network_id'])}
+                                subnet['network_id']),
+                            'ip_version': subnet['ip_version']}
+
+        if subnet['ip_version'] == 6 and subnet['enable_dhcp']:
+            if attributes.is_attr_set(subnet.get('ipv6_ra_mode')):
+                method_arguments['ipv6_ra_mode'] = subnet['ipv6_ra_mode']
+            if attributes.is_attr_set(subnet.get('ipv6_address_mode')):
+                method_arguments[
+                    'ipv6_address_mode'] = subnet['ipv6_address_mode']
 
         if cfg.require_dhcp_relay:
             for member in dhcp_members:
                 dhcp_member = models.InfobloxDHCPMember(
                     server_ip=member.ip,
+                    server_ipv6=member.ipv6,
                     network_id=network.id
                 )
                 context.session.add(dhcp_member)
@@ -129,6 +140,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             for member in dns_members:
                 dns_member = models.InfobloxDNSMember(
                     server_ip=member.ip,
+                    server_ipv6=member.ipv6,
                     network_id=network.id
                 )
                 context.session.add(dns_member)
@@ -169,7 +181,6 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         backend_subnet = self.get_subnet_by_id(context, subnet_id)
         cfg = self.config_finder.find_config_for_subnet(context,
                                                         backend_subnet)
-        
         cfg.verify_subnet_update_is_allowed(subnet)
 
         ib_network = self.infoblox.get_network(cfg.network_view,
@@ -230,7 +241,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         return deleted_subnet
 
     def allocate_ip(self, context, subnet, port, ip=None):
-        hostname = port.get('id') or uuidutils.generate_uuid()
+        hostname = uuidutils.generate_uuid()
         mac = port['mac_address']
         extattrs = self.ea_manager.get_extattrs_for_ip(context, port)
 
@@ -271,9 +282,6 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                           "available for allocation." % subnet['cidr'])
                 return None
 
-        # TODO(max_lobur): As kind of optimisation we could mark IP as used by
-        # neutron_ipam._allocate_specific_ip, to prevent poking already empty
-        # ranges.
         LOG.debug('IP address allocated on Infoblox NIOS: %s', allocated_ip)
 
         for member in set(cfg.dhcp_members):

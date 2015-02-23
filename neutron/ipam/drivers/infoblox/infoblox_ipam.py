@@ -13,17 +13,17 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.agent.linux import dhcp_relay
+import taskflow.engines
+from taskflow.patterns import linear_flow
+
 from neutron.db.infoblox import models
 from neutron.ipam.drivers.infoblox import config
 from neutron.ipam.drivers.infoblox import connector
 from neutron.ipam.drivers.infoblox import dns_controller
-from neutron.ipam.drivers.infoblox.ip_allocator import get_ip_allocator
+from neutron.ipam.drivers.infoblox import ip_allocator
 from neutron.ipam.drivers.infoblox import ipam_controller
 from neutron.ipam.drivers.infoblox import object_manipulator
 from neutron.ipam.drivers import neutron_ipam
-import taskflow.engines
-from taskflow.patterns import linear_flow
 
 
 class FlowContext(object):
@@ -43,17 +43,17 @@ class InfobloxIPAM(neutron_ipam.NeutronIPAM):
         config_finder = config.ConfigFinder()
         obj_manipulator = object_manipulator.InfobloxObjectManipulator(
             connector=connector.Infoblox())
-        ip_allocator = get_ip_allocator(obj_manipulator)
+        ip_alloc = ip_allocator.get_ip_allocator(obj_manipulator)
 
         self.ipam_controller = ipam_controller.InfobloxIPAMController(
             config_finder=config_finder,
             obj_manip=obj_manipulator,
-            ip_allocator=ip_allocator)
+            ip_allocator=ip_alloc)
 
         self.dns_controller = dns_controller.InfobloxDNSController(
             config_finder=config_finder,
             manipulator=obj_manipulator,
-            ip_allocator=ip_allocator
+            ip_allocator=ip_alloc
         )
 
     def create_subnet(self, context, subnet):
@@ -70,26 +70,28 @@ class InfobloxIPAM(neutron_ipam.NeutronIPAM):
         members = context.session.query(model)
         result = members.filter_by(network_id=network['id'])
         ip_list = []
+        ipv6_list = []
         for member in result:
             ip_list.append(member.server_ip)
-        return ip_list
+            ipv6_list.append(member.server_ipv6)
+        return (ip_list, ipv6_list)
 
     def get_additional_network_dict_params(self, ctx, network_id):
         network = self.ipam_controller.ib_db.get_network(ctx, network_id)
 
-        dns_list = self._collect_members_ips(ctx,
-                                             network,
-                                             models.InfobloxDNSMember)
+        dns_list, dns_ipv6_list = self._collect_members_ips(
+            ctx, network, models.InfobloxDNSMember)
 
-        dhcp_list = self._collect_members_ips(ctx,
-                                              network,
-                                              models.InfobloxDHCPMember)
+        dhcp_list, dhcp_ipv6_list = self._collect_members_ips(
+            ctx, network, models.InfobloxDHCPMember)
 
         ib_mgmt_ip = self.ipam_controller.ib_db.get_management_net_ip(
             ctx, network_id)
 
         return {
-            'external_dns_servers': dns_list,
             'external_dhcp_servers': dhcp_list,
-            dhcp_relay.MGMT_INTERFACE_IP_ATTR: ib_mgmt_ip
+            'external_dns_servers': dns_list,
+            'external_dhcp_ipv6_servers': dhcp_ipv6_list,
+            'external_dns_ipv6_servers': dns_ipv6_list,
+            'mgmt_iface_ip': ib_mgmt_ip
         }

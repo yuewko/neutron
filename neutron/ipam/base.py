@@ -25,8 +25,6 @@ from neutron.db import db_base_plugin_v2
 from neutron.db import models_v2
 from neutron.openstack.common import log as logging
 
-
-# NOTE(zasimov): copy-paste from db_base_plugin_v2
 # Ports with the following 'device_owner' values will not prevent
 # network deletion.  If delete_network() finds that all ports on a
 # network have these owners, it will explicitly delete each port
@@ -40,9 +38,7 @@ LOG = logging.getLogger(__name__)
 
 
 class BackendController(db_base_plugin_v2.CommonDbMixin):
-
     def _get_network(self, context, net_id):
-        # NOTE(zasimov): Copy-paste from db_base_plugin_v2
         try:
             network = self._get_by_id(context, models_v2.Network, net_id)
         except exc.NoResultFound:
@@ -54,7 +50,6 @@ class BackendController(db_base_plugin_v2.CommonDbMixin):
         return net_qry.filter_by(tenant_id=tenant_id).all()
 
     def _get_subnet(self, context, subnet_id):
-        # NOTE(zasimov): Copy-paste from db_base_plugin_v2
         try:
             subnet = self._get_by_id(context, models_v2.Subnet, subnet_id)
         except exc.NoResultFound:

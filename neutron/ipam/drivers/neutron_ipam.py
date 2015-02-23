@@ -45,12 +45,6 @@ class NeutronIPAMController(base.IPAMController):
             context.session.add(ip_range)
 
     def create_subnet(self, context, subnet):
-        """
-        NOTE(zasimov): Save gateway_ip as optimisation (bad practice).
-
-        Warning: subnet - is dict!!!!!
-        """
-        # NOTE(zasimov): Move into transaction
         tenant_id = self._get_tenant_id_for_create(context, subnet)
         network = self._get_network(context, subnet['network_id'])
 
@@ -65,6 +59,11 @@ class NeutronIPAMController(base.IPAMController):
                 'enable_dhcp': subnet['enable_dhcp'],
                 'gateway_ip': subnet['gateway_ip'],
                 'shared': network.shared}
+        if subnet['ip_version'] == 6 and subnet['enable_dhcp']:
+            if attributes.is_attr_set(subnet.get('ipv6_ra_mode')):
+                args['ipv6_ra_mode'] = subnet['ipv6_ra_mode']
+            if attributes.is_attr_set(subnet.get('ipv6_address_mode')):
+                args['ipv6_address_mode'] = subnet['ipv6_address_mode']
         backend_subnet = models_v2.Subnet(**args)
 
         self._make_allocation_pools(context, backend_subnet, subnet)
@@ -95,8 +94,6 @@ class NeutronIPAMController(base.IPAMController):
         return ports
 
     def _make_subnet_dict(self, subnet, fields=None):
-        # FIXME(zasimov): remove this function from IPAM!!
-        # Neede for get_subnets
         res = {'id': subnet['id'],
                'name': subnet['name'],
                'tenant_id': subnet['tenant_id'],
@@ -108,6 +105,8 @@ class NeutronIPAMController(base.IPAMController):
                                     for pool in subnet['allocation_pools']],
                'gateway_ip': subnet['gateway_ip'],
                'enable_dhcp': subnet['enable_dhcp'],
+               'ipv6_ra_mode': subnet['ipv6_ra_mode'],
+               'ipv6_address_mode': subnet['ipv6_address_mode'],
                'dns_nameservers': [dns['address']
                                    for dns in subnet['dns_nameservers']],
                'host_routes': [{'destination': route['destination'],
@@ -432,7 +431,8 @@ class NeutronDHCPController(base.DHCPController):
                     address=dns_addr,
                     subnet_id=backend_subnet.id)
                 context.session.add(dns)
-            del dhcp_params['dns_nameservers']
+            if len(dhcp_params['dns_nameservers']):
+                del dhcp_params['dns_nameservers']
 
         def _combine(ht):
             return ht['destination'] + "_" + ht['nexthop']
@@ -468,7 +468,6 @@ class NeutronDHCPController(base.DHCPController):
                      'nexthop': route_str.partition("_")[2]})
             del dhcp_params['host_routes']
 
-        # FIXME(zasimov): Is it here?
         backend_subnet.update(dhcp_params)
 
         result = {}
@@ -485,7 +484,6 @@ class NeutronDHCPController(base.DHCPController):
         pass
 
     def dhcp_is_enabled(self, context, backend_subnet):
-        # TODO(mirantis): Implement dhcp_is_enabled
         pass
 
     def disable_dhcp(self, context, backend_subnet):

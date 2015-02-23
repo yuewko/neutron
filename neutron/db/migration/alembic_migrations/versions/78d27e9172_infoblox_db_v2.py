@@ -43,7 +43,7 @@ def upgrade(active_plugins=None, options=None):
         return
 
     op.create_table(
-        'infobloxmembermaps',
+        'infoblox_member_maps',
         sa.Column('member_name', sa.String(255), nullable=False),
         sa.Column('map_id', sa.String(255), nullable=False))
 
@@ -52,4 +52,4 @@ def downgrade(active_plugins=None, options=None):
     if not migration.should_run(active_plugins, migration_for_plugins):
         return
 
-    op.drop_table('infobloxmembermaps')
+    op.drop_table('infoblox_member_maps')

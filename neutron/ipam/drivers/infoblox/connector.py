@@ -131,7 +131,7 @@ class Infoblox(object):
         if not objtype:
             raise ValueError('WAPI object type can\'t be empty.')
         if objtype_expected and '/' in objtype:
-            raise ValueError('WAPI object type can\'t have slash.')
+            raise ValueError('WAPI object type can\'t contain slash.')
 
     @reraise_neutron_exception
     def get_object(self, nios_object, payload={}, return_fields=[],

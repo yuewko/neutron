@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from sqlalchemy.orm import exc
-
 from neutron.db import external_net_db
 from neutron.db.infoblox import models
 from neutron.db import l3_db
@@ -36,12 +34,9 @@ def get_members(context, map_id, member_type):
     network id or Infoblox netview name).
     """
     q = context.session.query(models.InfobloxMemberMap)
-
     members = q.filter_by(map_id=map_id, member_type=member_type).all()
-
     if members:
         return [member.member_name for member in members]
-
     return None
 
 
@@ -75,12 +70,8 @@ def is_last_subnet_in_tenant(context, subnet_id, tenant_id):
 
 
 def is_network_external(context, network_id):
-    try:
-        context.session.query(external_net_db.ExternalNetwork).filter_by(
-            network_id=network_id).one()
-        return True
-    except exc.NoResultFound:
-        return False
+    query = context.session.query(external_net_db.ExternalNetwork)
+    return query.filter_by(network_id=network_id).count() > 0
 
 
 def delete_ip_allocation(context, network_id, subnet, ip_address):
@@ -106,7 +97,6 @@ def get_subnets_by_port(context, port_id):
               filter_by(id=port_id)
               .all())
     subnets = []
-
     subnet_qry = context.session.query(models_v2.Subnet)
     for allocation in allocs:
         subnets.append(subnet_qry.filter_by(id=allocation.subnet_id).first())
@@ -122,22 +112,19 @@ def get_network_name(context, subnet):
     q = context.session.query(models_v2.Network)
     net_name = q.join(models_v2.Subnet).filter(
         models_v2.Subnet.id == subnet['id']).first()
-
     if net_name:
         return net_name.name
+    return None
 
 
 def get_instance_id_by_floating_ip(context, floating_ip_id):
-    try:
-        query = context.session.query(l3_db.FloatingIP, models_v2.Port)
-        query = query.filter(l3_db.FloatingIP.id == floating_ip_id)
-        query = query.filter(models_v2.Port.id
-                             == l3_db.FloatingIP.fixed_port_id)
-        result = query.one()
-    except exc.NoResultFound:
-        return None
-
-    return result.Port.device_id
+    query = context.session.query(l3_db.FloatingIP, models_v2.Port)
+    query = query.filter(l3_db.FloatingIP.id == floating_ip_id)
+    query = query.filter(models_v2.Port.id == l3_db.FloatingIP.fixed_port_id)
+    result = query.first()
+    if result:
+        return result.Port.device_id
+    return None
 
 
 def get_subnet_dhcp_port_address(context, subnet_id):
@@ -153,12 +140,10 @@ def get_subnet_dhcp_port_address(context, subnet_id):
 
 def get_network_view(context, network_id):
     query = context.session.query(models.InfobloxNetViews)
-    try:
-        net_view = query.filter_by(network_id=network_id).one()
-    except exc.NoResultFound:
-        return None
-
-    return net_view.network_view
+    net_view = query.filter_by(network_id=network_id).first()
+    if net_view:
+        return net_view.network_view
+    return None
 
 
 def set_network_view(context, network_view, network_id):
@@ -187,19 +172,19 @@ def delete_management_ip(context, network_id):
 def get_management_ip_ref(context, network_id):
     query = context.session.query(models.InfobloxManagementNetIps)
     mgmt_ip = query.filter_by(network_id=network_id).first()
-
     return mgmt_ip.fixed_address_ref if mgmt_ip else None
 
 
 def get_management_net_ip(context, network_id):
     query = context.session.query(models.InfobloxManagementNetIps)
     mgmt_ip = query.filter_by(network_id=network_id).first()
-
     return mgmt_ip.ip_address if mgmt_ip else None
+
 
 def get_network(context, network_id):
     network_qry = context.session.query(models_v2.Network)
     return network_qry.filter_by(id=network_id).one()
+
 
 def get_subnet(context, subnet_id):
     subnet_qry = context.session.query(models_v2.Subnet)

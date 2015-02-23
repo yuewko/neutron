@@ -43,39 +43,29 @@ def upgrade(active_plugins=None, options=None):
         return
 
     op.create_table(
-        'infobloxdhcpmembers',
+        'infoblox_dhcp_members',
         sa.Column('id', sa.String(length=36), nullable=False),
         sa.Column('network_id', sa.String(length=36), nullable=False),
         sa.Column('server_ip', sa.String(length=40), nullable=False),
+        sa.Column('server_ipv6', sa.String(length=40), nullable=False),
         sa.ForeignKeyConstraint(['network_id'], ['networks.id'],
                                 ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'))
 
     op.create_table(
-        'infobloxdnsmembers',
+        'infoblox_dns_members',
         sa.Column('id', sa.String(length=36), nullable=False),
         sa.Column('network_id', sa.String(length=36), nullable=False),
         sa.Column('server_ip', sa.String(length=40), nullable=False),
+        sa.Column('server_ipv6', sa.String(length=40), nullable=False),
         sa.ForeignKeyConstraint(['network_id'], ['networks.id'],
                                 ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'))
-
-    op.drop_column('networks', 'dhcp_relay_ip')
-    op.drop_column('networks', 'dns_relay_ip')
 
 
 def downgrade(active_plugins=None, options=None):
     if not migration.should_run(active_plugins, migration_for_plugins):
         return
 
-    op.drop_table('infobloxdhcpmembers')
-    op.drop_table('infobloxdnsmembers')
-
-    op.add_column(
-        'networks',
-        sa.Column('dhcp_relay_ip', sa.String(length=64), nullable=True)
-    )
-    op.add_column(
-        'networks',
-        sa.Column('dns_relay_ip', sa.String(length=64), nullable=True)
-    )
+    op.drop_table('infoblox_dhcp_members')
+    op.drop_table('infoblox_dns_members')

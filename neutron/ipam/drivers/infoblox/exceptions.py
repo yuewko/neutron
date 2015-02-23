@@ -83,14 +83,8 @@ class InfobloxTooManyObjectsFound(exceptions.NeutronException):
 
 
 class InfobloxHostRecordIpAddrNotCreated(exceptions.NeutronException):
-    message = _("Infoblox host record ipv4addr has not been created for "
-                "IP %(ip)s, mac %(mac)s")
-
-
-class InfobloxHostRecordIpv4AddrNotCreated(exceptions.NeutronException):
-    """DEPRECATED. Use InfobloxHostRecordIpAddrNotCreated instead."""
-    message = _("Infoblox host record ipv4addr has not been created for "
-                "netview %(netview)s, cidr %(cidr)s, mac %(mac)s")
+    message = _("Infoblox host record ipv4addr/ipv6addr has not been "
+                "created for IP %(ip)s, mac %(mac)s")
 
 
 class NoInfobloxMemberAvailable(exceptions.ResourceExhausted):
@@ -140,9 +134,9 @@ class InfobloxObjectParsingError(exceptions.NeutronException):
     message = _("Infoblox object cannot be parsed from dict: %(data)s")
 
 
-class HostRecordNoIPv4Addrs(InfobloxObjectParsingError):
-    message = _("Cannot parse Host Record object from dict because 'ipv4addrs'"
-                "are absent.")
+class HostRecordNotPresent(InfobloxObjectParsingError):
+    message = _("Cannot parse Host Record object from dict because "
+                "'ipv4addrs'/'ipv6addrs' is absent.")
 
 
 class InfobloxInvalidIp(InfobloxObjectParsingError):

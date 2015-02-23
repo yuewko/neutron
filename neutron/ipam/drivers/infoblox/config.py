@@ -111,7 +111,7 @@ class ConfigFinder(object):
                 pass
             # If any of previous checker cannot validate value - rise error
             else:
-                msg = 'Invalid condition specified: {}'.format(
+                msg = 'Invalid condition specified: {0}'.format(
                       conf['condition'])
                 raise exceptions.InfobloxInvalidConditionalConfig(msg=msg)
 
@@ -141,7 +141,8 @@ class PatternBuilder(object):
 
         if ip_addr:
             octets = ip_addr.split('.')
-            pattern_dict['ip_address'] = ip_addr.replace('.', '-')
+            ip_addr = ip_addr.replace('.', '-').replace(':', '-')
+            pattern_dict['ip_address'] = ip_addr
             for i in xrange(len(octets)):
                 octet_key = 'ip_address_octet{i}'.format(i=(i + 1))
                 pattern_dict[octet_key] = octets[i]
@@ -197,18 +198,10 @@ class Config(object):
 
         self.require_dhcp_relay = config_dict.get('require_dhcp_relay', False)
 
-        self._dhcp_members = config_dict.get('dhcp_members',
-                                             self.NEXT_AVAILABLE_MEMBER)
-        self._dns_members = config_dict.get('dns_members',
-                                            self._dhcp_members)
-
-        if not isinstance(self._dns_members, list) and\
-           self._dns_members != self.NEXT_AVAILABLE_MEMBER:
-            self._dns_members = list(self._dns_members)
-
-        if not isinstance(self._dhcp_members, list) and\
-           self._dhcp_members != self.NEXT_AVAILABLE_MEMBER:
-            self._dhcp_members = list(self._dhcp_members)
+        self._dhcp_members = self._members_identifier(
+            config_dict.get('dhcp_members', self.NEXT_AVAILABLE_MEMBER))
+        self._dns_members = self._members_identifier(
+            config_dict.get('dns_members', self._dhcp_members))
 
         self.domain_suffix_pattern = config_dict.get(
             'domain_suffix_pattern', 'global.com')
@@ -240,7 +233,7 @@ class Config(object):
             'dns_view': self._dns_view
         }
 
-        return "ConditionalConfig({})".format(values)
+        return "ConditionalConfig{0}".format(values)
 
     @property
     def network_view(self):
@@ -406,6 +399,12 @@ class Config(object):
             raise exceptions.InfobloxInvalidConditionalConfig(msg=msg)
         return self.member_manager.get_member(members)
 
+    def _members_identifier(self, members):
+        if not isinstance(members, list) and\
+           members != self.NEXT_AVAILABLE_MEMBER:
+            members = list(members)
+        return members
+
 
 class MemberManager(object):
     def __init__(self, member_config_stream=None):
@@ -420,10 +419,17 @@ class MemberManager(object):
 
             try:
                 self.available_members = map(
-                    lambda m: objects.Member(name=m['name'], ip=m['ipv4addr']),
+                    lambda m: objects.Member(name=m.get('name'), ip=m.get('ipv4addr'),
+                                             ipv6=m.get('ipv6addr')),
                     filter(lambda m: m.get('is_available', True), all_members))
             except KeyError as key:
                 raise exceptions.InvalidMemberConfig(key=key)
+
+    def __repr__(self):
+        values = {
+            'available_members': self.available_members
+        }
+        return "MemberManager{0}".format(values)
 
     def next_available(self, context,
                        members_to_choose_from=Config.NEXT_AVAILABLE_MEMBER,

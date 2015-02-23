@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import re
 from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
@@ -33,12 +34,12 @@ OPTS = [
                         help=_("If single_network_view_name is specified, "
                                "this option will define DNS View name used "
                                "to serve networks from the single network "
-                               "view. Otherwise it'signored and "
+                               "view. Otherwise it is ignored and "
                                "'default.<netview_name>' is used.")),
     neutron_conf.StrOpt('external_dns_view_name',
                         default=None,
                         help=_("All the subnets created in external networks "
-                               "will beassociated with DNS View with such "
+                               "will be associated with DNS View with such "
                                "name. If not specified, name "
                                "'default.<netview_name>' will be used.")),
     neutron_conf.StrOpt('subnet_fqdn_suffix',
@@ -48,7 +49,7 @@ OPTS = [
                                "the following pattern "
                                "<subnet_domain><subnet_fqdn_suffix>. "
                                "Subnet domain uniquely represents subnet and "
-                               "equal to subnet name ifspecified, otherwise "
+                               "equal to subnet name if specified, otherwise "
                                "equal to the first part of subnet uuid.")),
     neutron_conf.BoolOpt('use_global_dns_zone',
                          default=True,
@@ -157,11 +158,19 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         zone_extattrs = self.ea_manager.get_extattrs_for_zone(
             context, subnet=backend_subnet)
 
-        # OS-583: Add prefix only for classless networks
-        prefix = backend_subnet['name']
-        for mask in ['0', '8', '16', '24']:
-            if backend_subnet['cidr'].endswith(mask):
-                prefix = None
+        # Add prefix only for classless networks (ipv4)
+        # mask greater than 24 needs prefix.
+        # use meaningful prefix if used
+        prefix = None
+        if backend_subnet['ip_version'] == 4:
+            m = re.search(r'/\d+', backend_subnet['cidr'])
+            mask = m.group().replace("/","")
+            if int(mask) > 24:
+                if len(backend_subnet['name']) > 0:
+                    prefix = backend_subnet['name']
+                else:
+                    prefix = '-'.join(filter(None,
+                        re.split(r'[.:/]', backend_subnet['cidr'])))
 
         args = {
             'backend_subnet': backend_subnet,
@@ -169,7 +178,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             'fqdn': dns_zone,
             'cidr': backend_subnet['cidr'],
             'prefix': prefix,
-            'zone_format': 'IPV4',
+            'zone_format': 'IPV%s' % backend_subnet['ip_version'],
             'zone_extattrs': zone_extattrs,
             'obj_manip': self.infoblox
         }

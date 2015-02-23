@@ -45,6 +45,7 @@ begin
       `id` varchar(36) NOT NULL,
       `network_id` varchar(36) NOT NULL,
       `server_ip` varchar(40) NOT NULL,
+      `server_ipv6` varchar(40) NOT NULL,
       primary key (`id`),
       key `network_id` (`network_id`),
       constraint `infoblox_dhcp_members_ibfk_1` foreign key (`network_id`) references `networks` (`id`) on delete cascade
@@ -58,6 +59,7 @@ begin
       `id` varchar(36) NOT NULL,
       `network_id` varchar(36) NOT NULL,
       `server_ip` varchar(40) NOT NULL,
+      `server_ipv6` varchar(40) NOT NULL,
       primary key (`id`),
       key `network_id` (`network_id`),
       constraint `infoblox_dns_members_ibfk_1` foreign key (`network_id`) references `networks` (`id`) on delete cascade

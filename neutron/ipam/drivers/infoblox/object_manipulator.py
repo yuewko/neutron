@@ -66,6 +66,17 @@ class IPBackend():
         self.obj_man._delete_infoblox_object(
             self.ib_network_name, payload)
 
+    def delete_ip_range(self, net_view, start_ip, end_ip):
+        range_data = {'start_addr': start_ip,
+                      'end_addr': end_ip,
+                      'network_view': net_view}
+        self._delete_infoblox_object(self.ib_range_name, range_data)
+
+    def delete_ip_from_host_record(self, host_record, ip):
+        host_record.ips.remove(ip)
+        self.obj_man._update_host_record_ips(self.ib_ipaddrs_name, host_record)
+        return host_record
+
     def delete_host_record(self, dns_view_name, ip_address):
         host_record_data = {'view': dns_view_name,
                             self.ib_ipaddr_name: ip_address}
@@ -175,6 +186,7 @@ class IPv4Backend(IPBackend):
     ib_ipaddr_object_name = 'ipv4address'
     ib_network_name = 'network'
     ib_fixedaddress_name = 'fixedaddress'
+    ib_range_name = 'range'
 
     def create_network(self, net_view_name, cidr, nameservers=None,
                        members=None, gateway_ip=None, dhcp_trel_ip=None,
@@ -266,6 +278,7 @@ class IPv6Backend(IPBackend):
     ib_ipaddr_object_name = 'ipv6address'
     ib_network_name = 'ipv6network'
     ib_fixedaddress_name = 'ipv6fixedaddress'
+    ib_range_name = 'ipv6range'
 
     def create_network(self, net_view_name, cidr, nameservers=None,
                        members=None, gateway_ip=None, dhcp_trel_ip=None,
@@ -274,7 +287,12 @@ class IPv6Backend(IPBackend):
                         'network': cidr,
                         'extattrs': network_extattrs}
 
-        # interestingly ipv4addr name is used
+        # member here takes ipv4addr since pre-hellfire NIOS version does not
+        # support ipv6addr (Hellfire supports ipv6addr.
+        # We are using ipv4addr to suppport both versions
+        # This is just to the GM know which member is used for
+        # their internal communication between GM and member so
+        # it has nothing to do wiht DHCP protocol.
         members_struct = []
         for member in members:
             members_struct.append({'ipv4addr': member.ip,
@@ -300,7 +318,7 @@ class IPv6Backend(IPBackend):
                       'extattrs': range_extattrs,
                       'network': network,
                       'network_view': network_view}
-        ib_object = self.obj_man._get_infoblox_object_or_none('range', range_data)
+        ib_object = self.obj_man._get_infoblox_object_or_none('ipv6range', range_data)
         if not ib_object:
             range_data['disable'] = disable
             self.obj_man._create_infoblox_object(
@@ -377,10 +395,38 @@ class InfobloxObjectManipulator(object):
                          'extattrs': nview_extattrs}
         return self._create_infoblox_object('networkview', net_view_data)
 
+    def delete_network_view(self, net_view_name):
+        # never delete default network view
+        if net_view_name == 'default':
+            return
+
+        net_view_data = {'name': net_view_name}
+        self._delete_infoblox_object('networkview', net_view_data)
+
     def create_dns_view(self, net_view_name, dns_view_name):
         dns_view_data = {'name': dns_view_name,
                          'network_view': net_view_name}
         return self._create_infoblox_object('view', dns_view_data)
+
+    def delete_dns_view(self, net_view_name):
+        net_view_data = {'name': net_view_name}
+        self._delete_infoblox_object('view', net_view_data)
+
+    def get_network(self, net_view_name, cidr):
+        ip_backend = IPBackendFactory.get(self, cidr)
+        return ip_backend.get_network(net_view_name, cidr)
+
+    def has_networks(self, network_view_name):
+        net_data = {'network_view': network_view_name}
+        try:
+            ib_net = self._get_infoblox_object_or_none('network', net_data)
+            return bool(ib_net)
+        except exc.InfobloxSearchError:
+            return False
+
+    def network_exists(self, net_view_name, cidr):
+        ip_backend = IPBackendFactory.get(self, cidr)
+        return ip_backend.network_exists(net_view_name, cidr)
 
     def create_network(self, net_view_name, cidr, nameservers=None,
                        members=None, gateway_ip=None, dhcp_trel_ip=None,
@@ -389,6 +435,10 @@ class InfobloxObjectManipulator(object):
         ip_backend.create_network(net_view_name, cidr, nameservers,
                                   members, gateway_ip, dhcp_trel_ip,
                                   network_extattrs)
+
+    def delete_network(self, net_view_name, cidr):
+        ip_backend = IPBackendFactory.get(self, cidr)
+        ip_backend.delete_network(net_view_name, cidr)
 
     def create_network_from_template(self, net_view_name, cidr, template,
                                      network_extattrs):
@@ -401,11 +451,31 @@ class InfobloxObjectManipulator(object):
         return self._create_infoblox_object('network', network_data,
                                             check_if_exists=False)
 
+    def update_network_options(self, ib_network, extattrs=None):
+        payload = {}
+        if ib_network.options:
+            payload['options'] = ib_network.options
+        if extattrs:
+            payload['extattrs'] = extattrs
+        self._update_infoblox_object_by_ref(ib_network.ref, payload)
+
     def create_ip_range(self, network_view, start_ip, end_ip, network,
                         disable, range_extattrs):
         ip_backend = IPBackendFactory.get(self, start_ip)
         ip_backend.create_ip_range(network_view, start_ip, end_ip,
                                    network, disable, range_extattrs)
+
+    def delete_ip_range(self, net_view, start_ip, end_ip):
+        ip_backend = IPBackendFactory.get(self, start_ip)
+        ip_backend.delete_ip_range(net_view, start_ip, end_ip)
+
+    def get_host_record(self, dns_view, ip):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.get_host_record(dns_view, ip)
+
+    def find_hostname(self, dns_view, hostname, ip):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.find_hostname(dns_view, hostname)
 
     def create_host_record_for_given_ip(self, dns_view_name, zone_auth,
                                         hostname, mac, ip, extattrs):
@@ -441,6 +511,10 @@ class InfobloxObjectManipulator(object):
         created_hr = self._create_infoblox_ip_address(hr)
         return created_hr
 
+    def delete_host_record(self, dns_view_name, ip_address):
+        ip_backend = IPBackendFactory.get(self, ip_address)
+        ip_backend.delete_host_record(dns_view_name, ip_address)
+
     def create_fixed_address_for_given_ip(self, network_view, mac, ip,
                                           extattrs):
         ip_backend = IPBackendFactory.get(self, ip)
@@ -468,18 +542,6 @@ class InfobloxObjectManipulator(object):
         created_fa = self._create_infoblox_ip_address(fa)
         return created_fa
 
-    def update_host_record_eas(self, dns_view, ip, extattrs):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.update_host_record_eas(dns_view, ip, extattrs)
-
-    def update_fixed_address_eas(self, network_view, ip, extattrs):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.update_host_record_eas(network_view, ip, extattrs)
-
-    def update_dns_record_eas(self, dns_view, ip, extattrs):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.update_host_record_eas(dns_view, ip, extattrs)
-
     def create_fixed_address_from_cidr(self, network_view, mac, cidr, extattrs):
         ip_backend = IPBackendFactory.get(self, cidr)
 
@@ -493,116 +555,32 @@ class InfobloxObjectManipulator(object):
         created_fa = self._create_infoblox_ip_address(fa)
         return created_fa
 
-    def delete_host_record(self, dns_view_name, ip_address):
-        ip_backend = IPBackendFactory.get(self, ip_address)
-        ip_backend.delete_host_record(dns_view_name, ip_address)
-
     def delete_fixed_address(self, network_view, ip_address):
         ip_backend = IPBackendFactory.get(self, ip_address)
         ip_backend.delete_fixed_address(network_view, ip_address)
 
-    def delete_ip_range(self, net_view, start_ip, end_ip):
-        range_data = {'start_addr': start_ip,
-                      'end_addr': end_ip,
-                      'network_view': net_view}
-        self._delete_infoblox_object('range', range_data)
+    def add_ip_to_record(self, host_record, ip, mac):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.add_ip_to_record(host_record, ip, mac)
 
-    def delete_object_by_ref(self, ref):
+    def add_ip_to_host_record_from_range(self, host_record, network_view,
+                                         mac, first_ip, last_ip):
+        ip = objects.IPAllocationObject.next_available_ip_from_range(
+                network_view, first_ip, last_ip)
+        hr = self.add_ip_to_record(host_record, ip, mac)
+        return hr
+
+    def delete_ip_from_host_record(self, host_record, ip):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.delete_ip_from_host_record(host_record, ip)
+
+    def has_dns_zones(self, dns_view):
+        zone_data = {'view': dns_view}
         try:
-            self.connector.delete_object(ref)
-        except exc.InfobloxCannotDeleteObject as e:
-            LOG.info(_("Failed to delete an object: %s"), e)
-
-    def get_member(self, member):
-        return self.connector.get_object('member', {'host_name': member.name})
-
-    def restart_all_services(self, member):
-        ib_member = self.get_member(member)[0]
-        self.connector.call_func('restartservices', ib_member['_ref'],
-                                 {'restart_option': 'RESTART_IF_NEEDED',
-                                  'service_option': 'ALL'})
-
-    def delete_network(self, net_view_name, cidr):
-        ip_backend = IPBackendFactory.get(self, cidr)
-        ip_backend.delete_network(net_view_name, cidr)
-
-    def delete_network_view(self, net_view_name):
-        # never delete default network view
-        if net_view_name == 'default':
-            return
-
-        net_view_data = {'name': net_view_name}
-        self._delete_infoblox_object('networkview', net_view_data)
-
-    def delete_dns_view(self, net_view_name):
-        net_view_data = {'name': net_view_name}
-        self._delete_infoblox_object('view', net_view_data)
-
-    def update_network_options(self, ib_network, extattrs=None):
-        payload = {}
-        if ib_network.options:
-            payload['options'] = ib_network.options
-        if extattrs:
-            payload['extattrs'] = extattrs
-        self._update_infoblox_object_by_ref(ib_network.ref, payload)
-
-    def get_network(self, net_view_name, cidr):
-        ip_backend = IPBackendFactory.get(self, cidr)
-        return ip_backend.get_network(net_view_name, cidr)
-
-    def network_exists(self, net_view_name, cidr):
-        ip_backend = IPBackendFactory.get(self, cidr)
-        return ip_backend.network_exists(net_view_name, cidr)
-
-    def bind_name_with_host_record(self, dnsview_name, ip, name):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.bind_name_with_host_record(dnsview_name, ip, name)
-
-    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.bind_name_with_record_a(dnsview_name, ip, name, bind_list)
-
-    def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.unbind_name_from_record_a(
-            dnsview_name, ip, name, unbind_list)
-
-    def get_all_associated_objects(self, net_view_name, ip):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.get_all_associated_objects(self, net_view_name, ip)
-
-    def get_object_refs_associated_with_a_record(self, a_record_ref):
-        associated_with_a_record = [  # {object_type, search_field}
-            {'type': 'record:cname', 'search': 'canonical'},
-            {'type': 'record:txt', 'search': 'name'}
-        ]
-
-        obj_refs = []
-        a_record = self.connector.get_object(a_record_ref)
-
-        for rec_inf in associated_with_a_record:
-            objs = self.connector.get_object(
-                rec_inf['type'], {'view': a_record['view'],
-                                  rec_inf['search']: a_record['name']})
-            if objs:
-                for obj in objs:
-                    obj_refs.append(obj['_ref'])
-
-        return obj_refs
-
-    def delete_all_associated_objects(self, net_view_name, ip, delete_list):
-        del_objs = []
-        obj_refs = self.get_all_associated_objects(net_view_name, ip)
-
-        for obj_ref in obj_refs:
-            del_objs.append(obj_ref)
-            if self._get_object_type_from_ref(obj_ref) == 'record:a':
-                del_objs.extend(
-                    self.get_object_refs_associated_with_a_record(obj_ref))
-
-        for obj_ref in del_objs:
-            if self._get_object_type_from_ref(obj_ref) in delete_list:
-                self.connector.delete_object(obj_ref)
+            zone = self._get_infoblox_object_or_none('zone_auth', zone_data)
+            return bool(zone)
+        except exc.InfobloxSearchError:
+            return False
 
     def create_dns_zone(self, dns_view, dns_zone_fqdn, primary_dns_member=None,
                         secondary_dns_members=None, zone_format=None,
@@ -648,46 +626,82 @@ class InfobloxObjectManipulator(object):
                          'view': dns_view}
         self._delete_infoblox_object('zone_auth', dns_zone_data)
 
-    def has_networks(self, network_view_name):
-        net_data = {'network_view': network_view_name}
+    def update_host_record_eas(self, dns_view, ip, extattrs):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.update_host_record_eas(dns_view, ip, extattrs)
+
+    def update_fixed_address_eas(self, network_view, ip, extattrs):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.update_host_record_eas(network_view, ip, extattrs)
+
+    def update_dns_record_eas(self, dns_view, ip, extattrs):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.update_host_record_eas(dns_view, ip, extattrs)
+
+    def bind_name_with_host_record(self, dnsview_name, ip, name):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.bind_name_with_host_record(dnsview_name, ip, name)
+
+    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.bind_name_with_record_a(dnsview_name, ip, name, bind_list)
+
+    def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.unbind_name_from_record_a(
+            dnsview_name, ip, name, unbind_list)
+
+    def get_member(self, member):
+        return self.connector.get_object('member', {'host_name': member.name})
+
+    def restart_all_services(self, member):
+        ib_member = self.get_member(member)[0]
+        self.connector.call_func('restartservices', ib_member['_ref'],
+                                 {'restart_option': 'RESTART_IF_NEEDED',
+                                  'service_option': 'ALL'})
+
+    def get_object_refs_associated_with_a_record(self, a_record_ref):
+        associated_with_a_record = [  # {object_type, search_field}
+            {'type': 'record:cname', 'search': 'canonical'},
+            {'type': 'record:txt', 'search': 'name'}
+        ]
+
+        obj_refs = []
+        a_record = self.connector.get_object(a_record_ref)
+
+        for rec_inf in associated_with_a_record:
+            objs = self.connector.get_object(
+                rec_inf['type'], {'view': a_record['view'],
+                                  rec_inf['search']: a_record['name']})
+            if objs:
+                for obj in objs:
+                    obj_refs.append(obj['_ref'])
+
+        return obj_refs
+
+    def get_all_associated_objects(self, net_view_name, ip):
+        ip_backend = IPBackendFactory.get(self, ip)
+        ip_backend.get_all_associated_objects(self, net_view_name, ip)
+
+    def delete_all_associated_objects(self, net_view_name, ip, delete_list):
+        del_objs = []
+        obj_refs = self.get_all_associated_objects(net_view_name, ip)
+
+        for obj_ref in obj_refs:
+            del_objs.append(obj_ref)
+            if self._get_object_type_from_ref(obj_ref) == 'record:a':
+                del_objs.extend(
+                    self.get_object_refs_associated_with_a_record(obj_ref))
+
+        for obj_ref in del_objs:
+            if self._get_object_type_from_ref(obj_ref) in delete_list:
+                self.connector.delete_object(obj_ref)
+
+    def delete_object_by_ref(self, ref):
         try:
-            ib_net = self._get_infoblox_object_or_none('network', net_data)
-            return bool(ib_net)
-        except exc.InfobloxSearchError:
-            return False
-
-    def has_dns_zones(self, dns_view):
-        zone_data = {'view': dns_view}
-        try:
-            zone = self._get_infoblox_object_or_none('zone_auth', zone_data)
-            return bool(zone)
-        except exc.InfobloxSearchError:
-            return False
-
-    def find_hostname(self, dns_view, hostname, ip):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.find_hostname(dns_view, hostname)
-
-    def get_host_record(self, dns_view, ip):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.get_host_record(dns_view, ip)
-
-    def delete_ip_from_host_record(self, host_record, ip):
-        ip_backend = IPBackendFactory.get(self, ip)
-        host_record.ips.remove(ip)
-        self._update_host_record_ips(ip_backend.ib_ipaddrs_name, host_record)
-        return host_record
-
-    def add_ip_to_record(self, host_record, ip, mac):
-        ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.add_ip_to_record(host_record, ip, mac)
-
-    def add_ip_to_host_record_from_range(self, host_record, network_view,
-                                         mac, first_ip, last_ip):
-        ip = objects.IPAllocationObject.next_available_ip_from_range(
-                network_view, first_ip, last_ip)
-        hr = self.add_ip_to_record(host_record, ip, mac)
-        return hr
+            self.connector.delete_object(ref)
+        except exc.InfobloxCannotDeleteObject as e:
+            LOG.info(_("Failed to delete an object: %s"), e)
 
     def _create_infoblox_ip_address(self, ip_object):
         try:

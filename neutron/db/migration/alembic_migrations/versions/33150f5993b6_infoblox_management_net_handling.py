@@ -22,7 +22,7 @@ This is not desirable from customer point of view as they do want a static IP
 assignment for such cases which will reduce any potential issue.
 
 Revision ID: 33150f5993b6
-Revises: d9841b33bd
+Revises: 256b90dd9824
 Create Date: 2014-08-28 14:40:20.585390
 
 """

@@ -506,6 +506,9 @@ class NeutronDNSController(base.DNSController):
     def delete_dns_zones(self, context, backend_subnet):
         pass
 
+    def disassociate_floatingip(self, context, ip_address, port_id):
+        pass
+
 
 class NeutronIPAM(base.IPAM):
     def __init__(self):

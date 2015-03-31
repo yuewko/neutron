@@ -14,16 +14,15 @@
 #    under the License.
 
 import mock
-from mock import call
 
 import taskflow.engines
 
 from neutron.common import constants as neutron_constants
 from neutron.ipam.drivers.infoblox import dns_controller
 from neutron.ipam.drivers.infoblox import infoblox_ipam
-from neutron.db.infoblox import infoblox_db as infoblox_db
 from neutron.plugins.common import constants as plugins_constants
 from neutron.tests import base
+
 
 class SubstringMatcher(object):
     def __init__(self, names):
@@ -143,7 +142,8 @@ class DomainZoneTestCase(base.BaseTestCase):
         context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
         subnet = {'network_id': 'some-id',
                   'name': 'some-name',
-                  'cidr': 'some-cidr'}
+                  'ip_version': 4,
+                  'cidr': '10.100.0.0/24'}
         expected_member = 'member-name'
 
         ip_allocator = mock.Mock()
@@ -163,12 +163,12 @@ class DomainZoneTestCase(base.BaseTestCase):
         taskflow.engines.run(context.parent_flow, store=context.store)
 
         assert (manip.method_calls ==
-                [call.create_dns_zone(mock.ANY,
+                [mock.call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       expected_member,
                                       mock.ANY,
                                       zone_extattrs=mock.ANY),
-                 call.create_dns_zone(mock.ANY,
+                 mock.call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       expected_member,
                                       mock.ANY,
@@ -182,7 +182,8 @@ class DomainZoneTestCase(base.BaseTestCase):
         context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
         subnet = {'network_id': 'some-id',
                   'name': 'some-name',
-                  'cidr': 'some-cidr'}
+                  'ip_version': 4,
+                  'cidr': '10.100.0.0/24'}
         primary_dns_member = 'member-primary'
         secondary_dns_members = ['member-secondary']
 
@@ -204,12 +205,12 @@ class DomainZoneTestCase(base.BaseTestCase):
         taskflow.engines.run(context.parent_flow, store=context.store)
 
         assert (manip.method_calls ==
-                [call.create_dns_zone(mock.ANY,
+                [mock.call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       primary_dns_member,
                                       secondary_dns_members,
                                       zone_extattrs=mock.ANY),
-                 call.create_dns_zone(mock.ANY,
+                 mock.call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       primary_dns_member,
                                       secondary_dns_members,
@@ -223,6 +224,7 @@ class DomainZoneTestCase(base.BaseTestCase):
         context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
         subnet = {'network_id': 'some-id',
                   'name': 'some-name',
+                  'ip_version': 4,
                   'cidr': '192.168.0.128/27'}
 
         ip_allocator = mock.Mock()
@@ -242,12 +244,12 @@ class DomainZoneTestCase(base.BaseTestCase):
         taskflow.engines.run(context.parent_flow, store=context.store)
 
         assert (manip.method_calls ==
-                [call.create_dns_zone(mock.ANY,
+                [mock.call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
                                       zone_extattrs=mock.ANY),
-                 call.create_dns_zone(mock.ANY,
+                 mock.call.create_dns_zone(mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
                                       mock.ANY,
@@ -261,6 +263,7 @@ class DomainZoneTestCase(base.BaseTestCase):
         context = infoblox_ipam.FlowContext(mock.Mock(), 'create-dns')
         subnet = {'network_id': 'some-id',
                   'name': 'some-name',
+                  'ip_version': 4,
                   'cidr': '192.168.0.0/24'}
 
         ip_allocator = mock.Mock()
@@ -280,18 +283,18 @@ class DomainZoneTestCase(base.BaseTestCase):
         taskflow.engines.run(context.parent_flow, store=context.store)
 
         assert (manip.method_calls ==
-                [call.create_dns_zone(mock.ANY,
-                                      mock.ANY,
-                                      mock.ANY,
-                                      mock.ANY,
-                                      zone_extattrs=mock.ANY),
-                 call.create_dns_zone(mock.ANY,
-                                      mock.ANY,
-                                      mock.ANY,
-                                      mock.ANY,
-                                      prefix=None,
-                                      zone_extattrs=mock.ANY,
-                                      zone_format=mock.ANY)
+                [mock.call.create_dns_zone(mock.ANY,
+                                           mock.ANY,
+                                           mock.ANY,
+                                           mock.ANY,
+                                           zone_extattrs=mock.ANY),
+                 mock.call.create_dns_zone(mock.ANY,
+                                           mock.ANY,
+                                           mock.ANY,
+                                           mock.ANY,
+                                           prefix=None,
+                                           zone_extattrs=mock.ANY,
+                                           zone_format=mock.ANY)
                  ])
 
     @mock.patch.object(infoblox_db, 'is_network_external',
@@ -324,10 +327,10 @@ class DomainZoneTestCase(base.BaseTestCase):
 
         dns_ctrlr.delete_dns_zones(context, subnet)
 
-        assert manip.method_calls == [call.delete_dns_zone(expected_dns_view,
-                                                           mock.ANY),
-                                      call.delete_dns_zone(expected_dns_view,
-                                                           subnet['cidr'])]
+        assert manip.method_calls == [
+            mock.call.delete_dns_zone(expected_dns_view, mock.ANY),
+            mock.call.delete_dns_zone(expected_dns_view, subnet['cidr'])
+        ]
 
     def test_no_dns_zone_is_deleted_when_global_dns_zone_used(self):
         manip = mock.Mock()
@@ -335,10 +338,18 @@ class DomainZoneTestCase(base.BaseTestCase):
         subnet = {'network_id': 'some-id',
                   'cidr': 'some-cidr',
                   'name': 'some-name'}
+        expected_dns_view = 'some-expected-dns-view'
+
+        cfg = mock.Mock()
+        cfg.is_global_config = True
+        cfg.domain_suffix_pattern = '{subnet_name}.cloud.com'
+        cfg.dns_view = expected_dns_view
 
         ip_allocator = mock.Mock()
+        config_finder = mock.Mock()
+        config_finder.find_config_for_subnet.return_value = cfg
         dns_ctrlr = dns_controller.InfobloxDNSController(
-            ip_allocator, manip, config_finder=mock.Mock())
+            ip_allocator, manip, config_finder)
         dns_ctrlr.pattern_builder = mock.Mock()
         dns_ctrlr.delete_dns_zones(context, subnet)
 

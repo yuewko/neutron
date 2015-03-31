@@ -13,10 +13,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import re
 import io
-import json
 import logging
-from operator import attrgetter
+import operator
 
 from oslo.config import cfg as neutron_conf
 
@@ -25,6 +25,7 @@ from neutron.db.infoblox import models as ib_models
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import nova_manager
 from neutron.ipam.drivers.infoblox import objects
+from neutron.openstack.common import jsonutils
 
 LOG = logging.getLogger(__name__)
 OPTS = [
@@ -49,31 +50,47 @@ class ConfigFinder(object):
         if not stream:
             config_file = neutron_conf.CONF.conditional_config
             if not config_file:
-                raise exceptions.ConfigNotFound(object='conditional config')
+                raise exceptions.InfobloxConfigException(
+                    msg="Config not found")
             stream = io.FileIO(config_file)
 
         self.member_manager = member_manager
 
+        self.variable_conditions = []
+        self.static_conditions = []
+
         with stream:
             try:
-                self.conf = json.loads(stream.read())
-                self._validate_conditions()
+                self.conf = jsonutils.loads(stream.read())
+                self.static_conditions, self.variable_conditions = \
+                    self._validate_conditions()
             except ValueError as e:
-                raise exceptions.InfobloxInvalidConditionalConfig(msg=e)
+                raise exceptions.InfobloxConfigException(msg=e)
 
     def find_config_for_subnet(self, context, subnet):
         """
         Returns first configuration which matches the object being created.
         :param context:
         :param subnet:
-        :return: :raise exceptions.InfobloxNoConfigFoundForSubnet:
+        :return: :raise exceptions.InfobloxConfigException:
         """
-        for cfg in self.conf:
-            cfg = Config(cfg, context, subnet, self.member_manager)
-            if self._condition_matches(context, cfg, subnet):
-                return cfg
+        # First search for matching variable condition
+        for conditions in [self.variable_conditions, self.static_conditions]:
+            for cfg in conditions:
+                cfg = Config(cfg, context, subnet, self.member_manager)
+                if self._condition_matches(context, cfg, subnet):
+                    return cfg
 
-        raise exceptions.InfobloxNoConfigFoundForSubnet(subnet=subnet)
+        raise exceptions.InfobloxConfigException(
+            msg="No config found for subnet %s" % subnet)
+
+    def get_all_configs(self, context, subnet):
+        cfgs = []
+        for conditions in [self.variable_conditions, self.static_conditions]:
+            for cfg in conditions:
+                cfg = Config(cfg, context, subnet, self.member_manager)
+                cfgs.append(cfg)
+        return cfgs
 
     @staticmethod
     def _variable_condition_match(condition, var, expected):
@@ -99,21 +116,26 @@ class ConfigFinder(object):
         is_static_cond = lambda cond, static_conds: cond in static_conds
         is_var_cond = lambda cond, var_conds: any([cond.startswith(valid)
                                                   for valid in var_conds])
+
+        static_conditions = []
+        variable_conditions = []
+
         for conf in self.conf:
             # If condition contain colon: validate it as variable
             if ':' in conf['condition'] and\
-               is_var_cond(conf['condition'],
+                is_var_cond(conf['condition'],
                            self.VALID_VARIABLE_CONDITIONS):
-                pass
+                variable_conditions.append(conf)
             # If not: validate it as static
             elif is_static_cond(conf['condition'],
                                 self.VALID_STATIC_CONDITIONS):
-                pass
+                static_conditions.append(conf)
             # If any of previous checker cannot validate value - rise error
             else:
                 msg = 'Invalid condition specified: {0}'.format(
                       conf['condition'])
-                raise exceptions.InfobloxInvalidConditionalConfig(msg=msg)
+                raise exceptions.InfobloxConfigException(msg=msg)
+        return static_conditions, variable_conditions
 
 
 class PatternBuilder(object):
@@ -121,10 +143,10 @@ class PatternBuilder(object):
         self.pattern = '.'.join([el.strip('.')
                                  for el in pattern if el is not None])
 
-    def build(self, context, subnet, port=None, ip_addr=None):
+    def build(self, context, subnet, port=None, ip_addr=None, instance_name=None):
         """
         Builds string by passing supplied values into pattern
-        :raise exceptions.InvalidPattern:
+        :raise exceptions.InfobloxConfigException:
         """
         self._validate_pattern()
 
@@ -150,15 +172,19 @@ class PatternBuilder(object):
         if port:
             pattern_dict['port_id'] = port['id']
             pattern_dict['instance_id'] = port['device_id']
-
-            nm = nova_manager.NovaManager()
-            pattern_dict['instance_name'] = nm.get_instance_name_by_id(
-                port['device_id'])
+            if instance_name:
+                pattern_dict['instance_name'] = instance_name
+            else:
+                if '{instance_name}' in self.pattern:
+                    nm = nova_manager.NovaManager()
+                    pattern_dict['instance_name'] = nm.get_instance_name_by_id(
+                        port['device_id'])
 
         try:
             fqdn = self.pattern.format(**pattern_dict)
         except (KeyError, IndexError) as e:
-            raise exceptions.InvalidPattern(msg=e)
+            raise exceptions.InfobloxConfigException(
+                msg="Invalid pattern %s" % e)
 
         return fqdn
 
@@ -166,8 +192,8 @@ class PatternBuilder(object):
         invalid_values = ['..']
         for val in invalid_values:
             if val in self.pattern:
-                error_message = "Invalid value {0}".format(val)
-                raise exceptions.InvalidPattern(msg=error_message)
+                error_message = "Invalid pattern value {0}".format(val)
+                raise exceptions.InfobloxConfigException(msg=error_message)
 
 
 class Config(object):
@@ -185,8 +211,8 @@ class Config(object):
             member_manager = MemberManager()
 
         if 'condition' not in config_dict:
-            raise exceptions.InfobloxInvalidConditionalConfig(
-                msg="Missing mandatory 'condition' option")
+            raise exceptions.InfobloxConfigException(
+                msg="Missing mandatory 'condition' config option")
 
         self.condition = config_dict['condition']
         self.is_external = config_dict.get('is_external', False)
@@ -207,6 +233,12 @@ class Config(object):
             'domain_suffix_pattern', 'global.com')
         self.hostname_pattern = config_dict.get(
             'hostname_pattern', 'host-{ip_address}.{subnet_name}')
+
+        pattern = re.compile(r'\{\S+\}')
+        if pattern.findall(self.domain_suffix_pattern):
+            self.is_static_domain_suffix = False
+        else:
+            self.is_static_domain_suffix = True
 
         self.network_template = config_dict.get('network_template')
         self.ns_group = config_dict.get('ns_group')
@@ -243,8 +275,8 @@ class Config(object):
 
         if (self._net_view.startswith('{') and
                 self._net_view not in self.NETWORK_VIEW_TEMPLATES):
-            raise exceptions.InfobloxInvalidConditionalConfig(
-                msg="Invalid value for 'network_view'")
+            raise exceptions.InfobloxConfigException(
+                msg="Invalid config value for 'network_view'")
 
         if self._net_view == '{tenant_id}':
             self._cached_network_view = self.subnet['tenant_id']
@@ -396,7 +428,7 @@ class Config(object):
         if template and not member_defined:
             msg = 'Member MUST be configured for {template}'.format(
                 template=template)
-            raise exceptions.InfobloxInvalidConditionalConfig(msg=msg)
+            raise exceptions.InfobloxConfigException(msg=msg)
         return self.member_manager.get_member(members)
 
     def _members_identifier(self, members):
@@ -411,11 +443,12 @@ class MemberManager(object):
         if not member_config_stream:
             config_file = neutron_conf.CONF.infoblox_members_config
             if not config_file:
-                raise exceptions.ConfigNotFound(object='Infoblox members')
+                raise exceptions.InfobloxConfigException(
+                    msg="Config not found")
 
             member_config_stream = io.FileIO(config_file)
         with member_config_stream:
-            all_members = json.loads(member_config_stream.read())
+            all_members = jsonutils.loads(member_config_stream.read())
 
             try:
                 self.available_members = map(
@@ -423,7 +456,8 @@ class MemberManager(object):
                                              ipv6=m.get('ipv6addr')),
                     filter(lambda m: m.get('is_available', True), all_members))
             except KeyError as key:
-                raise exceptions.InvalidMemberConfig(key=key)
+                raise exceptions.InfobloxConfigException(
+                    msg="Invalid member config key: %s" % key)
 
     def __repr__(self):
         values = {
@@ -435,14 +469,15 @@ class MemberManager(object):
                        members_to_choose_from=Config.NEXT_AVAILABLE_MEMBER,
                        member_type=ib_models.DHCP_MEMBER_TYPE):
         if members_to_choose_from == Config.NEXT_AVAILABLE_MEMBER:
-            members_to_choose_from = map(attrgetter('name'),
+            members_to_choose_from = map(operator.attrgetter('name'),
                                          self.available_members)
 
         already_reserved = ib_db.get_used_members(context, member_type)
         for member in members_to_choose_from:
             if member not in already_reserved:
                 return self.get_member(member)
-        raise exceptions.NoInfobloxMemberAvailable()
+        raise exceptions.InfobloxConfigException(
+            msg="No infoblox member available")
 
     def reserve_member(self, context, mapping, member_name, member_type):
         ib_db.attach_member(context, mapping, member_name, member_type)
@@ -454,7 +489,8 @@ class MemberManager(object):
         for member in self.available_members:
             if member.name == member_name:
                 return member
-        raise exceptions.NoInfobloxMemberAvailable()
+        raise exceptions.InfobloxConfigException(
+            msg="No infoblox member available")
 
     def _get_reserved_conf_members(self, exists_members):
         members = []
@@ -468,9 +504,8 @@ class MemberManager(object):
                     members.append(member)
 
         if not members:
-            raise exceptions.ReservedMemberNotAvailableInConfig(
-                member_name=", ".join(exists_members),
-                config=neutron_conf.CONF.infoblox_members_config)
+            msg = "Reserved member not available in config"
+            raise exceptions.InfobloxConfigException(msg=msg)
 
         return members
 

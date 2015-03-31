@@ -16,8 +16,9 @@
 import abc
 
 from oslo.config import cfg
-
 from neutron.openstack.common import log as logging
+from neutron.common import constants as neutron_constants
+import six
 
 
 OPTS = [
@@ -45,8 +46,8 @@ cfg.CONF.register_opts(OPTS)
 LOG = logging.getLogger(__name__)
 
 
+@six.add_metaclass(abc.ABCMeta)
 class IPAllocator(object):
-    __metaclass__ = abc.ABCMeta
 
     def __init__(self, infoblox):
         self.infoblox = infoblox
@@ -67,23 +68,28 @@ class IPAllocator(object):
         pass
 
     @abc.abstractmethod
-    def bind_names(self, dnsview_name, ip, name, extattrs):
+    def bind_names(self, netview_name, dnsview_name, ip, name, extattrs):
         pass
 
     @abc.abstractmethod
-    def unbind_names(self, dnsview_name, ip, name, extattrs):
+    def unbind_names(self, netview_name, dnsview_name, ip, name, extattrs):
         pass
 
 
 class HostRecordIPAllocator(IPAllocator):
-    def bind_names(self, dnsview_name, ip, name, extattrs):
+    def bind_names(self, netview_name, dnsview_name, ip, name, extattrs):
         # See OPENSTACK-181. In case hostname already exists on NIOS, update
         # host record which contains that hostname with the new IP address
         # rather than creating a separate host record object
-        reserved_hostname_hr = self.infoblox.find_hostname(dnsview_name, name, ip)
+        reserved_hostname_hr = self.infoblox.find_hostname(dnsview_name,
+                                                           name, ip)
         reserved_ip_hr = self.infoblox.get_host_record(dnsview_name, ip)
 
         if reserved_hostname_hr == reserved_ip_hr:
+            if extattrs.get('Port Attached Device - Device Owner').\
+                get('value') == neutron_constants.DEVICE_OWNER_FLOATINGIP:
+                self.infoblox.update_host_record_eas(dnsview_name, ip, extattrs)
+
             return
 
         if reserved_hostname_hr:
@@ -95,17 +101,19 @@ class HostRecordIPAllocator(IPAllocator):
                                                    hr_ip.mac)
                     break
         else:
-            self.infoblox.bind_name_with_host_record(dnsview_name, ip, name)
+            self.infoblox.bind_name_with_host_record(dnsview_name, ip,
+                                                     name, extattrs)
 
-    def unbind_names(self, dnsview_name, ip, name, extattrs):
+    def unbind_names(self, netview_name, dnsview_name, ip, name, extattrs):
         # Nothing to delete, all will be deleted together with host record.
         pass
 
-    def allocate_ip_from_range(self, dnsview_name, networkview_name, zone_auth,
-                               hostname, mac, first_ip, last_ip,
+    def allocate_ip_from_range(self, dnsview_name, networkview_name,
+                               zone_auth, hostname, mac, first_ip, last_ip,
                                extattrs=None):
         fqdn = hostname + '.' + zone_auth
-        host_record = self.infoblox.find_hostname(dnsview_name, fqdn, first_ip)
+        host_record = self.infoblox.find_hostname(dnsview_name, fqdn,
+                                                  first_ip)
         if host_record:
             hr = self.infoblox.add_ip_to_host_record_from_range(
                 host_record, networkview_name, mac, first_ip, last_ip)
@@ -131,20 +139,26 @@ class HostRecordIPAllocator(IPAllocator):
 
 
 class FixedAddressIPAllocator(IPAllocator):
-    def bind_names(self, dnsview_name, ip, name, extattrs):
+    def bind_names(self, netview_name, dnsview_name, ip, name, extattrs):
         bind_cfg = cfg.CONF.bind_dns_records_to_fixed_address
+        if extattrs.get('Port Attached Device - Device Owner').\
+            get('value') == neutron_constants.DEVICE_OWNER_FLOATINGIP:
+            self.infoblox.update_fixed_address_eas(netview_name, ip,
+                                                   extattrs)
+            self.infoblox.update_dns_record_eas(dnsview_name, ip,
+                                                extattrs)
         if bind_cfg:
             self.infoblox.bind_name_with_record_a(
                 dnsview_name, ip, name, bind_cfg, extattrs)
 
-    def unbind_names(self, dnsview_name, ip, name, extattrs):
+    def unbind_names(self, netview_name, dnsview_name, ip, name, extattrs):
         unbind_cfg = cfg.CONF.unbind_dns_records_from_fixed_address
         if unbind_cfg:
             self.infoblox.unbind_name_from_record_a(
                 dnsview_name, ip, name, unbind_cfg)
 
-    def allocate_ip_from_range(self, dnsview_name, networkview_name, zone_auth,
-                               hostname, mac, first_ip, last_ip,
+    def allocate_ip_from_range(self, dnsview_name, networkview_name,
+                               zone_auth, hostname, mac, first_ip, last_ip,
                                extattrs=None):
         fa = self.infoblox.create_fixed_address_from_range(
             networkview_name, mac, first_ip, last_ip, extattrs)

@@ -134,48 +134,68 @@ class Infoblox(object):
             raise ValueError('WAPI object type can\'t contain slash.')
 
     @reraise_neutron_exception
-    def get_object(self, nios_object, payload={}, return_fields=[],
-                   extattrs={}, proxy=False):
+    def get_object(self, objtype, payload=None, return_fields=None,
+                   extattrs=None, proxy=False):
         """
-        Retrieve a list of Infoblox objects of NIOS object <nios_object>
+        Retrieve a list of Infoblox objects of type 'objtype'
         Args:
-            nios_object (str): Infoblox object, e.g. 'network', 'range',
-                               or object reference.
+            objtype  (str): Infoblox object type, e.g. 'network', 
+                            'range', etc.
             payload (dict): Payload with data to send
             return_fields (list): List of fields to be returned
             extattrs      (list): List of Extensible Attributes
         Returns:
-            Infoblox object requested
+            A list of the Infoblox objects requested
         Raises:
-            InfobloxSearchError
+            InfobloxObjectNotFound
         """
         if return_fields is None:
             return_fields = []
         if extattrs is None:
             extattrs = {}
 
-        self._validate_objtype_or_die(nios_object, objtype_expected=False)
+        self._validate_objtype_or_die(objtype)
 
-        if payload is None:
-            query_params = {}
-        else:
+        query_params = dict()
+        if payload:
             query_params = payload
 
         if return_fields:
             query_params['_return_fields'] = ','.join(return_fields)
+
         # Some get requests like 'ipv4address' should be always
-        # proxified to GM on Hellfire
-        if self.is_cloud and proxy:
+        # proxied to GM on Hellfire
+        # If request is cloud and proxy is not forced yet,
+        # then plan to do 2 request:
+        # - the first one is not proxified to GM
+        # - the second is proxified to GM
+        urls = dict()
+        urls['direct'] = self._construct_url(objtype, query_params, extattrs)
+        if self.is_cloud:
             query_params['_proxy_search'] = 'GM'
+            urls['proxy'] = self._construct_url(objtype, query_params, extattrs)
+
+        url = urls['direct']
+        if self.is_cloud and proxy:
+            url = urls['proxy']
 
         headers = {'Content-type': 'application/json'}
 
-        url = self._construct_url(nios_object, query_params, extattrs)
+        ib_object = self._get_object(objtype, url, headers)
+        if ib_object:
+            return ib_object
 
+        # if cloud api and proxy is not used, use proxy
+        if self.is_cloud and not proxy:
+            return self._get_object(objtype, urls['proxy'], headers)
+
+        return None
+
+    def _get_object(self, objtype, url, headers):
         r = self.session.get(url,
-                             verify=self.sslverify,
-                             timeout=self.TIMEOUT,
-                             headers=headers)
+                     verify=self.sslverify,
+                     timeout=self.TIMEOUT,
+                     headers=headers)
 
         if r.status_code == requests.codes.UNAUTHORIZED:
             raise exc.InfobloxBadWAPICredential(response='')
@@ -183,7 +203,7 @@ class Infoblox(object):
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxSearchError(
                 response=jsonutils.loads(r.content),
-                objtype=nios_object,
+                objtype=objtype,
                 content=r.content,
                 code=r.status_code)
 
@@ -201,7 +221,7 @@ class Infoblox(object):
         Returns:
             The object reference of the newly create object
         Raises:
-            InfobloxCannotCreateObject
+            InfobloxException
         """
         if not return_fields:
             return_fields = []
@@ -214,10 +234,10 @@ class Infoblox(object):
             query_params['_return_fields'] = ','.join(return_fields)
 
         url = self._construct_url(objtype, query_params)
-
+        data = jsonutils.dumps(payload)
         headers = {'Content-type': 'application/json'}
         r = self.session.post(url,
-                              data=jsonutils.dumps(payload),
+                              data=data,
                               verify=self.sslverify,
                               timeout=self.TIMEOUT,
                               headers=headers)

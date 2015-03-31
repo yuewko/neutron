@@ -19,6 +19,7 @@ import taskflow.engines
 
 from neutron.common import exceptions as neutron_exc
 from neutron.db.infoblox import infoblox_db as infoblox_db
+from neutron.ipam.drivers.infoblox import ea_manager
 from neutron.ipam.drivers.infoblox import exceptions as ib_exceptions
 from neutron.ipam.drivers.infoblox import infoblox_ipam
 from neutron.ipam.drivers.infoblox import ipam_controller
@@ -34,7 +35,7 @@ class SubstringMatcher(object):
         return self.expected in actual
 
     def __repr__(self):
-        return "Expected substring: '{0}'".format(self.expected)
+        return "Expected substring: '{}'".format(self.expected)
 
 
 class CreateSubnetTestCases(base.BaseTestCase):
@@ -52,13 +53,14 @@ class CreateSubnetTestCases(base.BaseTestCase):
         self.object_manipulator.network_exists.return_value = False
         self.object_manipulator.set_network_view = mock.MagicMock()
 
-        cfg = mock.MagicMock()
+        cfg = mock.Mock()
         cfg.reserve_dhcp_members = mock.Mock(return_value=[])
         cfg.reserve_dns_members = mock.Mock(return_value=[])
+        cfg.dhcp_members = ['member1.com']
+        cfg.dns_members = ['member1.com']
 
-        config_finder = mock.MagicMock()
-        config_finder.find_config_for_subnet = mock.MagicMock(
-            return_value=cfg)
+        config_finder = mock.Mock()
+        config_finder.find_config_for_subnet = mock.Mock(return_value=cfg)
 
         context = infoblox_ipam.FlowContext(mock.MagicMock(), 'create-subnet')
 
@@ -88,7 +90,13 @@ class UpdateSubnetTestCase(base.BaseTestCase):
         self.object_manipulator = mock.Mock()
         self.context = mock.Mock()
         ip_allocator = mock.Mock()
-        config_finder = mock.MagicMock()
+        config_finder = mock.Mock()
+
+        cfg = mock.Mock()
+        cfg.dhcp_members = ['member1.com']
+        cfg.dns_members = ['member1.com']
+        config_finder.find_config_for_subnet.return_value = cfg
+
         self.ipam = ipam_controller.InfobloxIPAMController(
             self.object_manipulator, config_finder, ip_allocator)
         self.ipam.ea_manager = mock.Mock()
@@ -147,7 +155,11 @@ class UpdateSubnetTestCase(base.BaseTestCase):
     def test_extensible_attributes_get_updated(self):
         ea_manager = mock.Mock()
         manip = mock.MagicMock()
-        config_finder = mock.MagicMock()
+        config_finder = mock.Mock()
+        config = mock.Mock()
+        config.dhcp_members = ['member1.com']
+        config.dns_members = ['member1.com']
+        config_finder.find_config_for_subnet = mock.Mock(return_value=config)
         context = mock.Mock()
         subnet_id = 'some-id'
         subnet = mock.MagicMock()
@@ -168,11 +180,13 @@ class AllocateIPTestCase(base.BaseTestCase):
         ip_allocator = mock.Mock()
         context = mock.Mock()
 
-        subnet = {'tenant_id': 'some-id'}
+        subnet = {'tenant_id': 'some-id', 'id': 'some-id'}
         mac = 'aa:bb:cc:dd:ee:ff'
-        port = {'mac_address': mac,
-                'device_owner': 'owner'}
-        ip = '192.168.1.1'
+        port = {'id': hostname,
+                'mac_address': mac}
+        ip_dict = {'ip_address': '192.168.1.1',
+                   'subnet_id': 'fake-id'}
+        ip = {'ip_address': '192.168.1.1'}
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_config,
@@ -180,10 +194,11 @@ class AllocateIPTestCase(base.BaseTestCase):
         b.pattern_builder = mock.Mock()
         b.ea_manager = mock.Mock()
 
-        b.allocate_ip(context, subnet, port, ip)
+        b.allocate_ip(context, subnet, port, ip_dict)
 
         ip_allocator.allocate_given_ip.assert_called_once_with(
-            mock.ANY, mock.ANY, mock.ANY, mock.ANY, mac, ip, mock.ANY)
+            mock.ANY, mock.ANY, mock.ANY, hostname, mac, ip['ip_address'],
+            mock.ANY)
 
     def test_host_record_from_range_created_on_allocate_ip(self):
         infoblox = mock.Mock()
@@ -193,9 +208,12 @@ class AllocateIPTestCase(base.BaseTestCase):
 
         first_ip = '192.168.1.1'
         last_ip = '192.168.1.132'
+
         subnet = {'allocation_pools': [{'first_ip': first_ip,
                                         'last_ip': last_ip}],
-                  'tenant_id': 'some-id'}
+                  'tenant_id': 'some-id',
+                  'id': 'some-id'}
+
         mac = 'aa:bb:cc:dd:ee:ff'
         port = {'mac_address': mac,
                 'device_owner': 'owner'}
@@ -235,7 +253,8 @@ class AllocateIPTestCase(base.BaseTestCase):
 
         assert not infoblox.create_host_record_range.called
         assert not infoblox.create_host_record_ip.called
-        assert not b.allocate_ip(context, subnet, host)
+        self.assertRaises(ib_exceptions.InfobloxCannotAllocateIpForSubnet,
+                          b.allocate_ip, context, subnet, host)
 
 
 class DeallocateIPTestCase(base.BaseTestCase):
@@ -283,7 +302,7 @@ class NetOptionsMatcher(object):
         return self.expected_ip in actual_net.dns_nameservers
 
     def __repr__(self):
-        return "{0}".format(self.expected_ip)
+        return "{}".format(self.expected_ip)
 
 
 class DnsNameserversTestCase(base.BaseTestCase):
@@ -372,33 +391,23 @@ class DnsNameserversTestCase(base.BaseTestCase):
 
 
 class DeleteSubnetTestCase(base.BaseTestCase):
-
-    @mock.patch.object(infoblox_db, 'is_network_external',
-                       mock.Mock())
     def test_ib_network_deleted(self):
         infoblox = mock.Mock()
+        member_conf = mock.Mock()
+        config = mock.Mock()
+        config.dhcp_members = ['member1.com']
+        config.dns_members = ['member1.com']
+        member_conf.find_config_for_subnet = mock.Mock(return_value=config)
         ip_allocator = mock.Mock()
         context = mock.MagicMock()
-
-        cfg = mock.Mock()
-        cfg.is_global_config = False
-        cfg.dhcp_members = ['member40.com', 'member41.com']
-        cfg.dns_members = ['m1', 'm2', 'm3']
-        config_finder = mock.MagicMock()
-        config_finder.find_config_for_subnet = mock.Mock(return_value=cfg)
 
         cidr = '192.168.0.0/24'
         subnet = mock.MagicMock()
         subnet.__getitem__ = mock.Mock(return_value=cidr)
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
-                                                   config_finder,
+                                                   member_conf,
                                                    ip_allocator)
-        network = {'id': 'some-net-id',
-                   'shared': False}
-        b._get_network = mock.Mock()
-        b._get_network.return_value = network
-        infoblox_db.is_network_external.return_value = False
 
         b.delete_subnet(context, subnet)
 
@@ -406,7 +415,11 @@ class DeleteSubnetTestCase(base.BaseTestCase):
 
     def test_member_released(self):
         infoblox = mock.Mock()
-        member_finder = mock.MagicMock()
+        member_finder = mock.Mock()
+        config = mock.Mock()
+        config.dhcp_members = ['member1.com']
+        config.dns_members = ['member1.com']
+        member_finder.find_config_for_subnet = mock.Mock(return_value=config)
         ip_allocator = mock.Mock()
         context = mock.MagicMock()
 
@@ -424,9 +437,11 @@ class DeleteSubnetTestCase(base.BaseTestCase):
         infoblox = mock.Mock()
         infoblox.has_dns_zones = mock.Mock(return_value=False)
         ip_allocator = mock.Mock()
-        config = mock.MagicMock()
+        config = mock.Mock()
+        config.dhcp_members = ['member1.com']
+        config.dns_members = ['member1.com']
         config._dns_view = dns_view
-        config_finder = mock.MagicMock()
+        config_finder = mock.Mock()
         config_finder.find_config_for_subnet = mock.Mock(return_value=config)
         context = mock.Mock()
         subnet = mock.MagicMock()
@@ -443,7 +458,11 @@ class DeleteSubnetTestCase(base.BaseTestCase):
     def test_network_view_deleted(self):
         infoblox = mock.Mock()
         ip_allocator = mock.Mock()
-        member_conf = mock.MagicMock()
+        member_conf = mock.Mock()
+        config = mock.Mock()
+        config.dhcp_members = ['member1.com']
+        config.dns_members = ['member1.com']
+        member_conf.find_config_for_subnet = mock.Mock(return_value=config)
         context = mock.Mock()
         network = mock.MagicMock()
 
@@ -467,10 +486,17 @@ class CreateSubnetFlowTestCase(base.BaseTestCase):
         self.expected_exception = Exception
         self.context = infoblox_ipam.FlowContext(mock.MagicMock(),
                                                  'create-subnet')
-        self.subnet = mock.MagicMock()
-        self.subnet.__getitem__.side_effect = mock.MagicMock()
+        self.subnet = {'cidr': '192.168.0.0/24',
+                       'tenant_id': 'some-id',
+                       'network_id': 'some-id',
+                       'gateway_ip': '192.168.1.1',
+                       'allocation_pools': [{'start': 'start',
+                                             'end': 'end'}],
+                       'ip_version': 'ipv4',
+                       'name': 'some-name',
+                       'enable_dhcp': True}
 
-        self.infoblox.create_dns_view.side_effect = self.expected_exception()
+        self.infoblox.create_ip_range.side_effect = Exception()
         self.infoblox.network_exists.return_value = False
 
         self.b = ipam_controller.InfobloxIPAMController(self.infoblox,
@@ -522,8 +548,10 @@ class CreateSubnetFlowNiosNetExistsTestCase(base.BaseTestCase):
     def test_nios_network_is_updated_for_shared_os_network(self):
         self.b.ea_manager.get_extattrs_for_network = mock.Mock(
             return_value={
-                'Is External': {'value': 'False'},
-                'Is Shared': {'value': 'True'}
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_EXTERNAL: {
+                    'value': 'False'},
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_SHARED: {
+                    'value': 'True'}
             })
 
         self.b.create_subnet(self.context, self.subnet)
@@ -535,8 +563,10 @@ class CreateSubnetFlowNiosNetExistsTestCase(base.BaseTestCase):
     def test_nios_network_is_updated_for_shared_external_os_network(self):
         self.b.ea_manager.get_extattrs_for_network = mock.Mock(
             return_value={
-                'Is External': {'value': 'True'},
-                'Is Shared': {'value': 'True'}
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_EXTERNAL: {
+                    'value': 'True'},
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_SHARED: {
+                    'value': 'True'}
             })
 
         self.b.create_subnet(self.context, self.subnet)
@@ -548,8 +578,10 @@ class CreateSubnetFlowNiosNetExistsTestCase(base.BaseTestCase):
     def test_nios_network_is_updated_for_external_os_network(self):
         self.b.ea_manager.get_extattrs_for_network = mock.Mock(
             return_value={
-                'Is External': {'value': 'True'},
-                'Is Shared': {'value': 'False'}
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_EXTERNAL: {
+                    'value': 'True'},
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_SHARED: {
+                    'value': 'False'}
             })
 
         self.b.create_subnet(self.context, self.subnet)
@@ -561,8 +593,10 @@ class CreateSubnetFlowNiosNetExistsTestCase(base.BaseTestCase):
     def test_exception_is_raised_if_network_is_private(self):
         self.b.ea_manager.get_extattrs_for_network = mock.Mock(
             return_value={
-                'Is External': {'value': 'False'},
-                'Is Shared': {'value': 'False'}
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_EXTERNAL: {
+                    'value': 'False'},
+                ea_manager.InfobloxEaManager.INFOBLOX_IS_SHARED: {
+                    'value': 'False'}
             })
 
         self.b.create_subnet(self.context, self.subnet)
@@ -579,19 +613,21 @@ class DeleteNetworkTestCase(base.BaseTestCase):
     def test_deletes_all_subnets(self):
         infoblox = mock.Mock()
         ip_allocator = mock.Mock()
-        member_conf = mock.MagicMock()
+        member_conf = mock.Mock()
         context = mock.Mock()
+        db_manager = mock.Mock()
         network = {'id': 'some-id'}
         num_subnets = 5
 
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_conf,
-                                                   ip_allocator)
+                                                   ip_allocator,
+                                                   db_mgr=db_manager)
 
         b.delete_subnet = mock.Mock()
-        b.get_subnets_by_network = mock.Mock()
-        b.get_subnets_by_network.return_value = [mock.Mock()
-                                                 for _ in xrange(num_subnets)]
+        db_manager.get_subnets_by_network = mock.Mock()
+        db_manager.get_subnets_by_network.return_value = [
+            mock.Mock() for _ in xrange(num_subnets)]
 
         b.delete_network(context, network)
 
@@ -601,7 +637,7 @@ class DeleteNetworkTestCase(base.BaseTestCase):
     def test_deletes_network_view(self):
         infoblox = mock.Mock()
         ip_allocator = mock.Mock()
-        member_conf = mock.MagicMock()
+        member_conf = mock.Mock()
         context = mock.MagicMock()
         network_id = 'some-id'
 
@@ -616,11 +652,12 @@ class DeleteNetworkTestCase(base.BaseTestCase):
     def test_deletes_management_ip(self):
         infoblox = mock.Mock()
         ip_allocator = mock.Mock()
-        member_conf = mock.MagicMock()
+        member_conf = mock.Mock()
         context = mock.Mock()
         network = mock.MagicMock()
         ib_db = mock.Mock()
         ea_manager = mock.Mock()
+        db_manager = mock.Mock()
 
         ib_db.is_network_external.return_value = False
 
@@ -634,10 +671,11 @@ class DeleteNetworkTestCase(base.BaseTestCase):
                                                    member_conf,
                                                    ip_allocator,
                                                    ea_manager,
-                                                   ib_db)
+                                                   ib_db,
+                                                   db_mgr=db_manager)
 
         b.delete_subnet = mock.Mock()
-        b.get_subnets_by_network = mock.MagicMock()
+        db_manager.get_subnets_by_network = mock.MagicMock()
 
         b.delete_network(context, network)
         infoblox.delete_object_by_ref.assert_called_once_with(mock.ANY)
@@ -645,10 +683,11 @@ class DeleteNetworkTestCase(base.BaseTestCase):
     def test_deletes_management_ip_from_db(self):
         infoblox = mock.Mock()
         ip_allocator = mock.Mock()
-        member_conf = mock.MagicMock()
+        member_conf = mock.Mock()
         context = mock.Mock()
         expected_net_id = 'some-net-id'
         ib_db = mock.Mock()
+        db_manager = mock.Mock()
 
         ib_db.is_network_external.return_value = False
         net_view_name = 'expected_network_view'
@@ -660,19 +699,20 @@ class DeleteNetworkTestCase(base.BaseTestCase):
         b = ipam_controller.InfobloxIPAMController(infoblox,
                                                    member_conf,
                                                    ip_allocator,
-                                                   ib_db=ib_db)
+                                                   ib_db=ib_db,
+                                                   db_mgr=db_manager)
 
         b.delete_subnet = mock.Mock()
-        b.get_subnets_by_network = mock.MagicMock()
+        db_manager.get_subnets_by_network = mock.MagicMock()
 
         b.delete_network(context, expected_net_id)
         ib_db.delete_management_ip.assert_called_once_with(
             context, expected_net_id)
 
-    def test_deletes_management_network_ip_for_external_net(self):
+    def test_does_not_delete_management_network_ip_for_external_net(self):
         infoblox = mock.Mock()
         ip_allocator = mock.Mock()
-        member_conf = mock.MagicMock()
+        member_conf = mock.Mock()
         context = mock.MagicMock()
         network_id = mock.MagicMock()
         ib_db = mock.Mock()
@@ -693,14 +733,14 @@ class DeleteNetworkTestCase(base.BaseTestCase):
                                                    ib_db)
         b.delete_network(context, network_id)
 
-        assert infoblox.delete_object_by_ref.called
-        assert ib_db.delete_management_ip.called
+        assert not infoblox.delete_object_by_ref.called
+        assert not ib_db.delete_management_ip.called
 
 
 class CreateNetworkTestCase(base.BaseTestCase):
     def test_creates_fixed_address_object_in_management_network(self):
         infoblox = mock.Mock()
-        config_finder = mock.MagicMock()
+        config_finder = mock.Mock()
         ip_allocator = mock.Mock()
         ea_manager = mock.Mock()
         context = mock.Mock()
@@ -718,13 +758,12 @@ class CreateNetworkTestCase(base.BaseTestCase):
                                                    ip_allocator, ea_manager)
 
         c.create_network(context, network)
-
         infoblox.create_fixed_address_from_cidr.assert_called_once_with(
-            expected_net_view, expected_mac, cidr, mock.ANY)
+            expected_net_view, expected_mac, cidr)
 
     def test_stores_fixed_address_object_in_db(self):
         infoblox = mock.Mock()
-        config_finder = mock.MagicMock()
+        config_finder = mock.Mock()
         ip_allocator = mock.Mock()
         ea_manager = mock.Mock()
         context = mock.Mock()
@@ -751,7 +790,7 @@ class CreateNetworkTestCase(base.BaseTestCase):
 
     def test_does_nothing_if_mgmt_net_is_not_set_in_config(self):
         infoblox = mock.Mock()
-        config_finder = mock.MagicMock()
+        config_finder = mock.Mock()
         ip_allocator = mock.Mock()
         ea_manager = mock.Mock()
         context = mock.Mock()
@@ -769,7 +808,7 @@ class CreateNetworkTestCase(base.BaseTestCase):
 
     def test_does_nothing_for_external_net(self):
         infoblox = mock.Mock()
-        config_finder = mock.MagicMock()
+        config_finder = mock.Mock()
         ip_allocator = mock.Mock()
         ea_manager = mock.Mock()
         context = mock.Mock()

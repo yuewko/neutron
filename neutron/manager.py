@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import weakref
+
 from oslo.config import cfg
 
 from neutron.common import legacy
@@ -23,7 +25,6 @@ from neutron.openstack.common import periodic_task
 from neutron.plugins.common import constants
 
 from stevedore import driver
-
 
 LOG = logging.getLogger(__name__)
 
@@ -123,10 +124,12 @@ class NeutronManager(object):
         # the rest of service plugins
         self.service_plugins = {constants.CORE: self.plugin}
         self._load_service_plugins()
+
         # Load IPAM driver
-        ipam_driver_class_name = cfg.CONF.ipam_driver
-        ipam_driver_class = importutils.import_class(ipam_driver_class_name)
-        self.ipam = ipam_driver_class()
+        ipam_driver_name = cfg.CONF.ipam_driver
+        LOG.info(_("Loading ipam driver: %s"), ipam_driver_name)
+        ipam_driver_class = importutils.import_class(ipam_driver_name)
+        self.ipam_driver = ipam_driver_class()
 
     def _get_plugin_instance(self, namespace, plugin_provider):
         try:
@@ -200,24 +203,35 @@ class NeutronManager(object):
     @classmethod
     @utils.synchronized("manager")
     def _create_instance(cls):
-        if cls._instance is None:
+        if not cls.has_instance():
             cls._instance = cls()
+
+    @classmethod
+    def has_instance(cls):
+        return cls._instance is not None
+
+    @classmethod
+    def clear_instance(cls):
+        cls._instance = None
 
     @classmethod
     def get_instance(cls):
         # double checked locking
-        if cls._instance is None:
+        if not cls.has_instance():
             cls._create_instance()
         return cls._instance
 
     @classmethod
     def get_plugin(cls):
-        return cls.get_instance().plugin
+        # Return a weakref to minimize gc-preventing references.
+        return weakref.proxy(cls.get_instance().plugin)
 
     @classmethod
     def get_service_plugins(cls):
-        return cls.get_instance().service_plugins
+        # Return weakrefs to minimize gc-preventing references.
+        return dict((x, weakref.proxy(y))
+                    for x, y in cls.get_instance().service_plugins.iteritems())
 
     @classmethod
-    def get_ipam(cls):
-        return cls.get_instance().ipam
+    def get_ipam_driver(cls):
+        return cls.get_instance().ipam_driver

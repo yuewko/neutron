@@ -104,7 +104,7 @@ class NECPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
 
     def __init__(self):
         super(NECPluginV2, self).__init__()
-        self.ofc = ofc_manager.OFCManager(self)
+        self.ofc = ofc_manager.OFCManager(self.safe_reference)
         self.base_binding_dict = self._get_base_binding_dict()
         portbindings_base.register_port_dict_function()
 
@@ -120,7 +120,7 @@ class NECPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
             config.CONF.router_scheduler_driver
         )
 
-        nec_router.load_driver(self, self.ofc)
+        nec_router.load_driver(self.safe_reference, self.ofc)
         self.port_handlers = {
             'create': {
                 const.DEVICE_OWNER_ROUTER_GW: self.create_router_port,
@@ -148,7 +148,7 @@ class NECPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
 
         # NOTE: callback_sg is referred to from the sg unit test.
         self.callback_sg = SecurityGroupServerRpcCallback()
-        callbacks = [NECPluginV2RPCCallbacks(self),
+        callbacks = [NECPluginV2RPCCallbacks(self.safe_reference),
                      DhcpRpcCallback(),
                      L3RpcCallback(),
                      self.callback_sg,
@@ -373,17 +373,24 @@ class NECPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
         tenant_id = net_db['tenant_id']
         ports = self.get_ports(context, filters={'network_id': [id]})
 
-        # check if there are any tenant owned ports in-use
+        # check if there are any tenant owned ports in-use;
+        # consider ports owned by floating ips as auto_delete as if there are
+        # no other tenant owned ports, those floating ips are disassociated
+        # and will be auto deleted with self._process_l3_delete()
         only_auto_del = all(p['device_owner'] in
-                            db_base_plugin_v2.AUTO_DELETE_PORT_OWNERS
+                            db_base_plugin_v2.AUTO_DELETE_PORT_OWNERS or
+                            p['device_owner'] == const.DEVICE_OWNER_FLOATINGIP
                             for p in ports)
         if not only_auto_del:
             raise n_exc.NetworkInUse(net_id=id)
 
+        self._process_l3_delete(context, id)
+
         # Make sure auto-delete ports on OFC are deleted.
         # If an error occurs during port deletion,
         # delete_network will be aborted.
-        for port in ports:
+        for port in [p for p in ports if p['device_owner']
+                     in db_base_plugin_v2.AUTO_DELETE_PORT_OWNERS]:
             port = self.deactivate_port(context, port)
 
         # delete all packet_filters of the network from the controller
@@ -406,15 +413,11 @@ class NECPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
         self._cleanup_ofc_tenant(context, tenant_id)
 
     def _get_base_binding_dict(self):
-        binding = {
-            portbindings.VIF_TYPE: portbindings.VIF_TYPE_OVS,
-            portbindings.VIF_DETAILS: {
-                # TODO(rkukura): Replace with new VIF security details
-                portbindings.CAP_PORT_FILTER:
-                'security-group' in self.supported_extension_aliases,
-                portbindings.OVS_HYBRID_PLUG: True
-            }
-        }
+        sg_enabled = sg_rpc.is_firewall_enabled()
+        vif_details = {portbindings.CAP_PORT_FILTER: sg_enabled,
+                       portbindings.OVS_HYBRID_PLUG: sg_enabled}
+        binding = {portbindings.VIF_TYPE: portbindings.VIF_TYPE_OVS,
+                   portbindings.VIF_DETAILS: vif_details}
         return binding
 
     def _extend_port_dict_binding_portinfo(self, port_res, portinfo):
@@ -652,9 +655,13 @@ class NECPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
         if l3_port_check:
             self.prevent_l3_port_deletion(context, id)
         with context.session.begin(subtransactions=True):
-            self.disassociate_floatingips(context, id)
+            router_ids = self.disassociate_floatingips(
+                context, id, do_notify=False)
             self._delete_port_security_group_bindings(context, id)
             super(NECPluginV2, self).delete_port(context, id)
+
+        # now that we've left db transaction, we are safe to notify
+        self.notify_routers_updated(context, router_ids)
         self.notify_security_groups_member_updated(context, port)
 
 

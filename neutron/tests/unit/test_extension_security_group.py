@@ -959,6 +959,19 @@ class TestSecurityGroups(SecurityGroupDBTestCase):
                 self.deserialize(self.fmt, res)
                 self.assertEqual(res.status_int, webob.exc.HTTPBadRequest.code)
 
+    def test_create_security_group_rule_icmp_with_code_only(self):
+        name = 'webservers'
+        description = 'my webservers'
+        with self.security_group(name, description) as sg:
+            security_group_id = sg['security_group']['id']
+            with self.security_group_rule(security_group_id):
+                rule = self._build_security_group_rule(
+                    sg['security_group']['id'], 'ingress',
+                    const.PROTO_NAME_ICMP, None, '2')
+                res = self._create_security_group_rule(self.fmt, rule)
+                self.deserialize(self.fmt, res)
+                self.assertEqual(res.status_int, webob.exc.HTTPBadRequest.code)
+
     def test_list_ports_security_group(self):
         with self.network() as n:
             with self.subnet(n):
@@ -1419,6 +1432,19 @@ class TestConvertIPPrefixToCIDR(base.BaseTestCase):
         addresses = ['10.1.0.0/16', '10.1.2.3/32', '2001:db8:1234::/48']
         for addr in addresses:
             self.assertEqual(ext_sg.convert_ip_prefix_to_cidr(addr), addr)
+
+
+class TestConvertProtocol(base.BaseTestCase):
+    def test_convert_numeric_protocol(self):
+        assert(isinstance(ext_sg.convert_protocol('2'), str))
+
+    def test_convert_bad_protocol(self):
+        for val in ['bad', '256', '-1']:
+            self.assertRaises(ext_sg.SecurityGroupRuleInvalidProtocol,
+                              ext_sg.convert_protocol, val)
+
+    def test_convert_numeric_protocol_to_string(self):
+        self.assertIsInstance(ext_sg.convert_protocol(2), str)
 
 
 class TestSecurityGroupsXML(TestSecurityGroups):

@@ -35,16 +35,16 @@ class PatternBuilderTestCase(base.BaseTestCase):
         context = mock.MagicMock()
         subnet = mock.MagicMock()
 
-        pb = config.PatternBuilder("{0}")
-        self.assertRaises(exceptions.InvalidPattern,
+        pb = config.PatternBuilder("{}")
+        self.assertRaises(exceptions.InfobloxConfigException,
                           pb.build, context, subnet)
 
         pb = config.PatternBuilder("start..end")
-        self.assertRaises(exceptions.InvalidPattern,
+        self.assertRaises(exceptions.InfobloxConfigException,
                           pb.build, context, subnet)
 
         pb = config.PatternBuilder("{non-existing-variable}")
-        self.assertRaises(exceptions.InvalidPattern,
+        self.assertRaises(exceptions.InfobloxConfigException,
                           pb.build, context, subnet)
 
     def test_subnet_id_used_if_subnet_has_no_name(self):
@@ -111,4 +111,4 @@ class PatternBuilderTestCase(base.BaseTestCase):
         try:
             pb.build(context, subnet, port, ip_addr)
         except exceptions.InvalidPattern as e:
-            self.fail('Unexpected exception: {0}'.format(e))
+            self.fail('Unexpected exception: {}'.format(e))

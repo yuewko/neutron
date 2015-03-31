@@ -16,7 +16,6 @@
 #    under the License.
 
 import mock
-from mock import patch
 import requests
 from requests import exceptions as req_exc
 
@@ -30,6 +29,7 @@ valid_config.infoblox_wapi = 'http://localhost'
 valid_config.infoblox_username = 'user'
 valid_config.infoblox_password = 'pass'
 valid_config.infoblox_sslverify = False
+valid_config.infoblox_http_max_retries = 3
 
 
 class UrlMatcher(object):
@@ -84,8 +84,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         objtype = 'network'
         payload = {'ip': '0.0.0.0'}
 
-        with patch.object(requests.Session, 'post',
-                          return_value=mock.Mock()) as patched_create:
+        with mock.patch.object(requests.Session, 'post',
+                               return_value=mock.Mock()) as patched_create:
             patched_create.return_value.status_code = 201
             patched_create.return_value.content = '{}'
             self.connector.create_object(objtype, payload)
@@ -101,8 +101,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         objtype = 'network'
         payload = {'ip': '0.0.0.0',
                    'extattrs': {'Subnet ID': {'value': 'fake_subnet_id'}}}
-        with patch.object(requests.Session, 'post',
-                          return_value=mock.Mock()) as patched_create:
+        with mock.patch.object(requests.Session, 'post',
+                               return_value=mock.Mock()) as patched_create:
             patched_create.return_value.status_code = 201
             patched_create.return_value.content = '{}'
             self.connector.create_object(objtype, payload)
@@ -120,8 +120,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         objtype = 'network'
         payload = {'ip': '0.0.0.0'}
 
-        with patch.object(requests.Session, 'get',
-                          return_value=mock.Mock()) as patched_get:
+        with mock.patch.object(requests.Session, 'get',
+                               return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
             patched_get.return_value.content = '{}'
             self.connector.get_object(objtype, payload)
@@ -139,7 +139,7 @@ class TestInfobloxConnector(base.BaseTestCase):
         objtype = 'network'
         payload = {'ip': '0.0.0.0'}
 
-        with patch.object(requests.Session, 'get',
+        with mock.patch.object(requests.Session, 'get',
                           return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
             patched_get.return_value.content = '{}'
@@ -160,7 +160,7 @@ class TestInfobloxConnector(base.BaseTestCase):
         extattrs = {
             'Subnet ID': {'value': 'fake_subnet_id'}
         }
-        with patch.object(requests.Session, 'get',
+        with mock.patch.object(requests.Session, 'get',
                           return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
             patched_get.return_value.content = '{}'
@@ -179,8 +179,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         extattrs = {
             'Subnet ID': {'value': 'fake_subnet_id'}
         }
-        with patch.object(requests.Session, 'get',
-                          return_value=mock.Mock()) as patched_get:
+        with mock.patch.object(requests.Session, 'get',
+                               return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
             patched_get.return_value.content = '{}'
             self.connector.get_object(objtype, payload, extattrs=extattrs)
@@ -197,8 +197,8 @@ class TestInfobloxConnector(base.BaseTestCase):
         ref = 'network'
         payload = {'ip': '0.0.0.0'}
 
-        with patch.object(requests.Session, 'put',
-                          return_value=mock.Mock()) as patched_update:
+        with mock.patch.object(requests.Session, 'put',
+                               return_value=mock.Mock()) as patched_update:
             patched_update.return_value.status_code = 200
             patched_update.return_value.content = '{}'
             self.connector.update_object(ref, payload)
@@ -213,8 +213,8 @@ class TestInfobloxConnector(base.BaseTestCase):
     @mock.patch.object(connector.cfg, 'CONF', valid_config)
     def test_delete_object(self):
         ref = 'network'
-        with patch.object(requests.Session, 'delete',
-                          return_value=mock.Mock()) as patched_delete:
+        with mock.patch.object(requests.Session, 'delete',
+                               return_value=mock.Mock()) as patched_delete:
             patched_delete.return_value.status_code = 200
             patched_delete.return_value.content = '{}'
             self.connector.delete_object(ref)

@@ -43,7 +43,7 @@ class IPBackend():
             'network_view': net_view_name,
             'ip_address': ip
         }
-        assoc_objects = self._get_infoblox_object_or_none(
+        assoc_objects = self.obj_man._get_infoblox_object_or_none(
             self.ib_ipaddr_object_name, assoc_with_ip, return_fields=['objects'],
             proxy=True)
         if assoc_objects:
@@ -70,7 +70,7 @@ class IPBackend():
         range_data = {'start_addr': start_ip,
                       'end_addr': end_ip,
                       'network_view': net_view}
-        self._delete_infoblox_object(self.ib_range_name, range_data)
+        self.obj_man._delete_infoblox_object(self.ib_range_name, range_data)
 
     def delete_ip_from_host_record(self, host_record, ip):
         host_record.ips.remove(ip)
@@ -89,10 +89,11 @@ class IPBackend():
         self.obj_man._delete_infoblox_object(
             self.ib_fixedaddress_name, fa_data)
 
-    def bind_name_with_host_record(self, dnsview_name, ip, name):
+    def bind_name_with_host_record(self, dnsview_name, ip, name, extattrs):
         record_host = {
             self.ib_ipaddr_name: ip,
-            'view': dnsview_name
+            'view': dnsview_name,
+            'extattrs': extattrs
         }
         update_kwargs = {'name': name}
         self.obj_man._update_infoblox_object(
@@ -471,11 +472,11 @@ class InfobloxObjectManipulator(object):
 
     def get_host_record(self, dns_view, ip):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.get_host_record(dns_view, ip)
+        return ip_backend.get_host_record(dns_view, ip)
 
     def find_hostname(self, dns_view, hostname, ip):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.find_hostname(dns_view, hostname)
+        return ip_backend.find_hostname(dns_view, hostname)
 
     def create_host_record_for_given_ip(self, dns_view_name, zone_auth,
                                         hostname, mac, ip, extattrs):
@@ -632,19 +633,19 @@ class InfobloxObjectManipulator(object):
 
     def update_fixed_address_eas(self, network_view, ip, extattrs):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.update_host_record_eas(network_view, ip, extattrs)
+        ip_backend.update_fixed_address_eas(network_view, ip, extattrs)
 
     def update_dns_record_eas(self, dns_view, ip, extattrs):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.update_host_record_eas(dns_view, ip, extattrs)
+        ip_backend.update_dns_record_eas(dns_view, ip, extattrs)
 
-    def bind_name_with_host_record(self, dnsview_name, ip, name):
+    def bind_name_with_host_record(self, dnsview_name, ip, name, extattrs):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.bind_name_with_host_record(dnsview_name, ip, name)
+        ip_backend.bind_name_with_host_record(dnsview_name, ip, name, extattrs)
 
-    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list):
+    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list, extattrs):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.bind_name_with_record_a(dnsview_name, ip, name, bind_list)
+        ip_backend.bind_name_with_record_a(dnsview_name, ip, name, bind_list, extattrs)
 
     def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
         ip_backend = IPBackendFactory.get(self, ip)
@@ -681,7 +682,7 @@ class InfobloxObjectManipulator(object):
 
     def get_all_associated_objects(self, net_view_name, ip):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.get_all_associated_objects(self, net_view_name, ip)
+        return ip_backend.get_all_associated_objects(net_view_name, ip)
 
     def delete_all_associated_objects(self, net_view_name, ip, delete_list):
         del_objs = []
@@ -716,7 +717,7 @@ class InfobloxObjectManipulator(object):
             if "Cannot find 1 available IP" in e.response['text']:
                 raise exc.InfobloxCannotAllocateIp(ip_data=ip_object.to_dict())
             else:
-                raise
+                raise e
         except exc.HostRecordNotPresent:
             raise exc.InfobloxHostRecordIpAddrNotCreated(ip=ip_object.ip,
                                                          mac=ip_object.mac)

@@ -22,7 +22,6 @@ import re
 import shutil
 import socket
 import sys
-import uuid
 
 import netaddr
 from oslo.config import cfg
@@ -32,6 +31,7 @@ from neutron.agent.linux import ip_lib
 from neutron.agent.linux import utils
 from neutron.common import constants
 from neutron.common import exceptions
+from neutron.common import utils as commonutils
 from neutron.openstack.common import importutils
 from neutron.openstack.common import jsonutils
 from neutron.openstack.common import log as logging
@@ -127,7 +127,6 @@ class DhcpBase(object):
         """Restart the dhcp service for the network."""
         self.disable(retain_port=True)
         self.enable()
-        self.device_manager.update(self.network)
 
     @abc.abstractproperty
     def active(self):
@@ -147,6 +146,16 @@ class DhcpBase(object):
     def check_version(cls):
         """Execute version checks on DHCP server."""
 
+        raise NotImplementedError
+
+    @classmethod
+    def get_isolated_subnets(cls, network):
+        """Returns a dict indicating whether or not a subnet is isolated."""
+        raise NotImplementedError
+
+    @classmethod
+    def should_enable_metadata(cls, conf, network):
+        """True if the metadata-proxy should be enabled for the network."""
         raise NotImplementedError
 
 
@@ -174,15 +183,17 @@ class DhcpLocalProcess(DhcpBase):
         """Disable DHCP for this network by killing the local process."""
         pid = self.pid
 
-        if self.active:
-            cmd = ['kill', '-9', pid]
-            utils.execute(cmd, self.root_helper)
+        if pid:
+            if self.active:
+                cmd = ['kill', '-9', pid]
+                utils.execute(cmd, self.root_helper)
+            else:
+                LOG.debug(_('DHCP for %(net_id)s is stale, pid %(pid)d '
+                            'does not exist, performing cleanup'),
+                          {'net_id': self.network.id, 'pid': pid})
             if not retain_port:
-                self.device_manager.destroy(self.network, self.interface_name)
-
-        elif pid:
-            LOG.debug(_('DHCP for %(net_id)s pid %(pid)d is stale, ignoring '
-                        'command'), {'net_id': self.network.id, 'pid': pid})
+                self.device_manager.destroy(self.network,
+                                            self.interface_name)
         else:
             LOG.debug(_('No DHCP started for %s'), self.network.id)
 
@@ -399,7 +410,7 @@ class Dnsmasq(DhcpLocalProcess):
         else:
             LOG.debug(_('Pid %d is stale, relaunching dnsmasq'), self.pid)
         LOG.debug(_('Reloading allocations for network: %s'), self.network.id)
-        self.device_manager.update(self.network)
+        self.device_manager.update(self.network, self.interface_name)
 
     def _iter_hosts(self):
         """Iterate over hosts.
@@ -515,6 +526,7 @@ class Dnsmasq(DhcpLocalProcess):
 
         options = []
 
+        isolated_subnets = self.get_isolated_subnets(self.network)
         dhcp_ips = collections.defaultdict(list)
         subnet_idx_map = {}
         for i, subnet in enumerate(self.network.subnets):
@@ -533,19 +545,24 @@ class Dnsmasq(DhcpLocalProcess):
             host_routes = []
             for hr in subnet.host_routes:
                 if hr.destination == "0.0.0.0/0":
-                    gateway = hr.nexthop
+                    if not gateway:
+                        gateway = hr.nexthop
                 else:
                     host_routes.append("%s,%s" % (hr.destination, hr.nexthop))
 
             # Add host routes for isolated network segments
 
-            if self._enable_metadata(subnet):
+            if (isolated_subnets[subnet.id] and
+                    self.conf.enable_isolated_metadata and
+                    subnet.ip_version == 4):
                 subnet_dhcp_ip = subnet_to_interface_ip[subnet.id]
                 host_routes.append(
                     '%s/32,%s' % (METADATA_DEFAULT_IP, subnet_dhcp_ip)
                 )
 
             if host_routes:
+                if gateway and subnet.ip_version == 4:
+                    host_routes.append("%s,%s" % ("0.0.0.0/0", gateway))
                 options.append(
                     self._format_option(i, 'classless-static-route',
                                         ','.join(host_routes)))
@@ -624,24 +641,52 @@ class Dnsmasq(DhcpLocalProcess):
 
         return ','.join((set_tag + tag, '%s' % option) + args)
 
-    def _enable_metadata(self, subnet):
-        '''Determine if the metadata route will be pushed to hosts on subnet.
+    @classmethod
+    def get_isolated_subnets(cls, network):
+        """Returns a dict indicating whether or not a subnet is isolated
 
-        If subnet has a Neutron router attached, we want the hosts to get
-        metadata from the router's proxy via their default route instead.
-        '''
-        if self.conf.enable_isolated_metadata and subnet.ip_version == 4:
-            if subnet.gateway_ip is None:
+        A subnet is considered non-isolated if there is a port connected to
+        the subnet, and the port's ip address matches that of the subnet's
+        gateway. The port must be owned by a nuetron router.
+        """
+        isolated_subnets = collections.defaultdict(lambda: True)
+        subnets = dict((subnet.id, subnet) for subnet in network.subnets)
+
+        for port in network.ports:
+            if port.device_owner != constants.DEVICE_OWNER_ROUTER_INTF:
+                continue
+            for alloc in port.fixed_ips:
+                if subnets[alloc.subnet_id].gateway_ip == alloc.ip_address:
+                    isolated_subnets[alloc.subnet_id] = False
+
+        return isolated_subnets
+
+    @classmethod
+    def should_enable_metadata(cls, conf, network):
+        """Determine whether the metadata proxy is needed for a network
+
+        This method returns True for truly isolated networks (ie: not attached
+        to a router), when the enable_isolated_metadata flag is True.
+
+        This method also returns True when enable_metadata_network is True,
+        and the network passed as a parameter has a subnet in the link-local
+        CIDR, thus characterizing it as a "metadata" network. The metadata
+        network is used by solutions which do not leverage the l3 agent for
+        providing access to the metadata service via logical routers built
+        with 3rd party backends.
+        """
+        if conf.enable_metadata_network and conf.enable_isolated_metadata:
+            # check if the network has a metadata subnet
+            meta_cidr = netaddr.IPNetwork(METADATA_DEFAULT_CIDR)
+            if any(netaddr.IPNetwork(s.cidr) in meta_cidr
+                   for s in network.subnets):
                 return True
-            else:
-                for port in self.network.ports:
-                    if port.device_owner == constants.DEVICE_OWNER_ROUTER_INTF:
-                        for alloc in port.fixed_ips:
-                            if alloc.subnet_id == subnet.id:
-                                return False
-                return True
-        else:
+
+        if not conf.use_namespaces or not conf.enable_isolated_metadata:
             return False
+
+        isolated_subnets = cls.get_isolated_subnets(network)
+        return any(isolated_subnets[subnet.id] for subnet in network.subnets)
 
     @classmethod
     def lease_update(cls):
@@ -698,25 +743,18 @@ class DeviceManager(object):
         """Return a unique DHCP device ID for this host on the network."""
         # There could be more than one dhcp server per network, so create
         # a device id that combines host and network ids
+        return commonutils.get_dhcp_agent_device_id(network.id, self.conf.host)
 
-        host_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname())
-        return 'dhcp%s-%s' % (host_uuid, network.id)
-
-    def _get_device(self, network, port):
-        """Return DHCP ip_lib device for this host on the network."""
-        interface_name = self.get_interface_name(network, port)
-        return ip_lib.IPDevice(interface_name,
-                               self.root_helper,
-                               network.namespace)
-
-    def _set_default_route(self, network, port):
+    def _set_default_route(self, network, device_name):
         """Sets the default gateway for this dhcp namespace.
 
         This method is idempotent and will only adjust the route if adjusting
         it would change it from what it already is.  This makes it safe to call
         and avoids unnecessary perturbation of the system.
         """
-        device = self._get_device(network, port)
+        device = ip_lib.IPDevice(device_name,
+                                 self.root_helper,
+                                 network.namespace)
         gateway = device.route.get_gateway()
         if gateway:
             gateway = gateway['gateway']
@@ -781,6 +819,19 @@ class DeviceManager(object):
                     dhcp_port = port
                 # break since we found port that matches device_id
                 break
+
+        # check for a reserved DHCP port
+        if dhcp_port is None:
+            LOG.debug(_('DHCP port %(device_id)s on network %(network_id)s'
+                        ' does not yet exist. Checking for a reserved port.'),
+                      {'device_id': device_id, 'network_id': network.id})
+            for port in network.ports:
+                port_device_id = getattr(port, 'device_id', None)
+                if port_device_id == constants.DEVICE_ID_RESERVED_DHCP_PORT:
+                    dhcp_port = self.plugin.update_dhcp_port(
+                        port.id, {'port': {'device_id': device_id}})
+                    if dhcp_port:
+                        break
 
         # DHCP port has not yet been created.
         if dhcp_port is None:
@@ -851,18 +902,14 @@ class DeviceManager(object):
             device.route.pullup_route(interface_name)
 
         if self.conf.use_namespaces:
-            self._set_default_route(network, port)
+            self._set_default_route(network, interface_name)
 
         return interface_name
 
-    def update(self, network):
+    def update(self, network, device_name):
         """Update device settings for the network's DHCP on this host."""
         if self.conf.use_namespaces:
-            device_id = self.get_device_id(network)
-            port = self.plugin.get_dhcp_port(network.id, device_id)
-            if not port:
-                raise exceptions.NetworkNotFound(net_id=network.id)
-            self._set_default_route(network, port)
+            self._set_default_route(network, device_name)
 
     def destroy(self, network, device_name):
         """Destroy the device used for the network's DHCP on this host."""

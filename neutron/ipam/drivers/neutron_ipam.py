@@ -13,19 +13,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import itertools
-
-import netaddr
-from neutron.common import exceptions as n_exc
-from sqlalchemy import orm
-from sqlalchemy.orm import exc
-
 from neutron.api.v2 import attributes
+from neutron.common import constants
+from neutron.common import exceptions as q_exc
 from neutron.db import models_v2
 from neutron.ipam import base
+from neutron.ipam.drivers import neutron_db
 from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
-
 
 LOG = logging.getLogger(__name__)
 
@@ -69,7 +64,10 @@ class NeutronIPAMController(base.IPAMController):
         self._make_allocation_pools(context, backend_subnet, subnet)
         context.session.add(backend_subnet)
 
-        return backend_subnet
+        return self._make_subnet_dict(backend_subnet)
+
+    def create_network(self, context, network):
+        return network
 
     def get_subnet_by_id(self, context, subnet_id):
         return self._get_subnet(context, subnet_id)
@@ -77,21 +75,6 @@ class NeutronIPAMController(base.IPAMController):
     def update_subnet(self, context, subnet_id, subnet):
         backend_subnet = self.get_subnet_by_id(context, subnet_id)
         return backend_subnet
-
-    def get_subnets_by_network(self, context, network_id):
-        subnet_qry = context.session.query(models_v2.Subnet)
-        return subnet_qry.filter_by(network_id=network_id).all()
-
-    def get_all_subnets(self, context):
-        return context.session.query(models_v2.Subnet).all()
-
-    def get_subnet_ports(self, context, backend_subnet):
-        # TODO(zasimov): get ports for current subnet
-        # Check if any tenant owned ports are using this subnet
-        ports_qry = context.session.query(models_v2.IPAllocation)
-        ports_qry = ports_qry.options(orm.joinedload('ports'))
-        ports = ports_qry.filter_by(subnet_id=backend_subnet.id)
-        return ports
 
     def _make_subnet_dict(self, subnet, fields=None):
         res = {'id': subnet['id'],
@@ -114,309 +97,86 @@ class NeutronIPAMController(base.IPAMController):
                                for route in subnet['routes']],
                'shared': subnet['shared']
                }
-        return self._fields(res, fields)
+        # Call auxiliary extend functions, if any
+        self._apply_dict_extend_functions(attributes.SUBNETS, res, subnet)
 
-    def get_subnets(self, context, filters=None, fields=None,
-                    sorts=None, limit=None, marker=None,
-                    page_reverse=False):
-        marker_obj = self._get_marker_obj(context, 'subnet', limit, marker)
-        return self._get_collection(context, models_v2.Subnet,
-                                    self._make_subnet_dict,
-                                    filters=filters, fields=fields,
-                                    sorts=sorts,
-                                    limit=limit,
-                                    marker_obj=marker_obj,
-                                    page_reverse=page_reverse)
+        return self._fields(res, fields)
 
     def get_subnets_count(self, context, filters=None):
         return self._get_collection_count(context, models_v2.Subnet,
                                           filters=filters)
 
     def delete_subnet(self, context, backend_subnet):
-        context.session.delete(backend_subnet)
-        return True
+        pass
 
     def force_off_ports(self, context, ports):
         """Force Off ports on subnet delete event."""
-        LOG.info('force_off_ports')
-        for p in ports:
-            LOG.info(p)
-        ports.delete()
+        for port in ports:
+            query = (context.session.query(models_v2.Port).
+                     enable_eagerloads(False).filter_by(id=port.id))
+            if not context.is_admin:
+                query = query.filter_by(tenant_id=context.tenant_id)
 
-    @staticmethod
-    def _generate_ip(context, backend_subnet):
-        """Generate an IP address.
+            query.delete()
 
-        The IP address will be generated from one of the subnets defined on
-        the network.
-        """
-        range_qry = context.session.query(
-            models_v2.IPAvailabilityRange).join(
-                models_v2.IPAllocationPool).with_lockmode('update')
-        range = range_qry.filter_by(subnet_id=backend_subnet.id).first()
-        if not range:
-            LOG.debug(_("All IPs from subnet %(subnet_id)s (%(cidr)s) "
-                        "allocated"),
-                      {'subnet_id': backend_subnet.id,
-                       'cidr': backend_subnet.cidr})
-            raise n_exc.IpAddressGenerationFailure(
-                net_id=backend_subnet['network_id'])
-        ip_address = range['first_ip']
-        LOG.debug(_("Allocated IP - %(ip_address)s from %(first_ip)s "
-                    "to %(last_ip)s"),
-                  {'ip_address': ip_address,
-                   'first_ip': range['first_ip'],
-                   'last_ip': range['last_ip']})
-        if range['first_ip'] == range['last_ip']:
-            # No more free indices on subnet => delete
-            LOG.debug(_("No more free IP's in slice. Deleting allocation "
-                        "pool."))
-            context.session.delete(range)
+    def allocate_ip(self, context, subnet, host, ip=None):
+        if ip is not None and 'ip_address' in ip:
+            subnet_id = subnet['id']
+            ip_address = {'subnet_id': subnet_id,
+                          'ip_address': ip['ip_address']}
+            neutron_db.allocate_specific_ip(
+                context, subnet_id, ip['ip_address'])
+            return ip_address
         else:
-            # increment the first free
-            range['first_ip'] = str(netaddr.IPAddress(ip_address) + 1)
-        return ip_address
-
-    @staticmethod
-    def _allocate_specific_ip(context, backend_subnet, ip_address):
-        """Allocate a specific IP address on the subnet."""
-        ip = int(netaddr.IPAddress(ip_address))
-        range_qry = context.session.query(
-            models_v2.IPAvailabilityRange).join(
-                models_v2.IPAllocationPool).with_lockmode('update')
-        results = range_qry.filter_by(subnet_id=backend_subnet.id)
-        for range in results:
-            first = int(netaddr.IPAddress(range['first_ip']))
-            last = int(netaddr.IPAddress(range['last_ip']))
-            if first <= ip <= last:
-                if first == last:
-                    context.session.delete(range)
-                    return
-                elif first == ip:
-                    range['first_ip'] = str(netaddr.IPAddress(ip_address) + 1)
-                    return
-                elif last == ip:
-                    range['last_ip'] = str(netaddr.IPAddress(ip_address) - 1)
-                    return
-                else:
-                    # Split into two ranges
-                    new_first = str(netaddr.IPAddress(ip_address) + 1)
-                    new_last = range['last_ip']
-                    range['last_ip'] = str(netaddr.IPAddress(ip_address) - 1)
-                    ip_range = models_v2.IPAvailabilityRange(
-                        allocation_pool_id=range['allocation_pool_id'],
-                        first_ip=new_first,
-                        last_ip=new_last)
-                    context.session.add(ip_range)
-                    return ip_address
-            return None
-
-    def allocate_ip(self, context, backend_subnet, host, ip=None):
-        if ip:
-            return self._allocate_specific_ip(context, backend_subnet, ip)
-        else:
-            return self._generate_ip(context, backend_subnet)
-
-    def _check_ip_in_allocation_pool(self, context, backend_subnet,
-                                     ip_address):
-        if backend_subnet.gateway_ip == ip_address:
-            return False
-
-        # Check if the requested IP is in a defined allocation pool
-        pool_qry = context.session.query(models_v2.IPAllocationPool)
-        allocation_pools = pool_qry.filter_by(subnet_id=backend_subnet.id)
-        ip = netaddr.IPAddress(ip_address)
-        for allocation_pool in allocation_pools:
-            allocation_pool_range = netaddr.IPRange(
-                allocation_pool['first_ip'],
-                allocation_pool['last_ip'])
-            if ip in allocation_pool_range:
-                return True
-        return False
-
-    # FIXME(zasimov): kill network_id
-    @staticmethod
-    def _delete_ip_allocation(context, network_id, backend_subnet, ip_address):
-
-        # Delete the IP address from the IPAllocate table
-        LOG.debug(_("Delete allocated IP %(ip_address)s "
-                    "(%(network_id)s/%(subnet_id)s)"),
-                  {'ip_address': ip_address,
-                   'network_id': network_id,
-                   'subnet_id': backend_subnet.id})
-        alloc_qry = context.session.query(
-            models_v2.IPAllocation).with_lockmode('update')
-        alloc_qry.filter_by(network_id=network_id,
-                            ip_address=ip_address,
-                            subnet_id=backend_subnet.id).delete()
-
-    # FIXME(zasimov): kill network_id
-    # @staticmethod
-    def _recycle_ip(self, context, network_id, backend_subnet, ip_address):
-        """Return an IP address to the pool of free IP's on the network
-        subnet.
-
-        TODO(zasimov): check this function (ip range is lost?)
-        """
-        if type(backend_subnet) in (str, unicode):
-            backend_subnet = self._get_subnet(context,
-                                              backend_subnet)
-
-        # FIXME(zasimov): maybe use normal join here?
-        # Grab all allocation pools for the subnet
-        allocation_pools = (context.session.query(
-            models_v2.IPAllocationPool).filter_by(subnet_id=backend_subnet.id).
-            options(orm.joinedload('available_ranges', innerjoin=True)).
-            with_lockmode('update'))
-        # If there are no available ranges the previous query will return no
-        # results as it uses an inner join to avoid errors with the postgresql
-        # backend (see lp bug 1215350). In this case IP allocation pools must
-        # be loaded with a different query, which does not require lock for
-        # update as the allocation pools for a subnet are immutable.
-        # The 2nd query will be executed only if the first yields no results
-        unlocked_allocation_pools = (context.session.query(
-            models_v2.IPAllocationPool).filter_by(subnet_id=backend_subnet.id))
-
-        # Find the allocation pool for the IP to recycle
-        pool_id = None
-
-        for allocation_pool in itertools.chain(allocation_pools,
-                                               unlocked_allocation_pools):
-            allocation_pool_range = netaddr.IPRange(
-                allocation_pool['first_ip'], allocation_pool['last_ip'])
-            if netaddr.IPAddress(ip_address) in allocation_pool_range:
-                pool_id = allocation_pool['id']
-                break
-        if not pool_id:
-            NeutronIPAMController._delete_ip_allocation(
-                context, network_id, backend_subnet, ip_address)
-            return
-        # Two requests will be done on the database. The first will be to
-        # search if an entry starts with ip_address + 1 (r1). The second
-        # will be to see if an entry ends with ip_address -1 (r2).
-        # If 1 of the above holds true then the specific entry will be
-        # modified. If both hold true then the two ranges will be merged.
-        # If there are no entries then a single entry will be added.
-        range_qry = context.session.query(
-            models_v2.IPAvailabilityRange).with_lockmode('update')
-        ip_first = str(netaddr.IPAddress(ip_address) + 1)
-        ip_last = str(netaddr.IPAddress(ip_address) - 1)
-        LOG.debug(_("Recycle %s"), ip_address)
-        try:
-            r1 = range_qry.filter_by(allocation_pool_id=pool_id,
-                                     first_ip=ip_first).one()
-            LOG.debug(_("Recycle: first match for %(first_ip)s-%(last_ip)s"),
-                      {'first_ip': r1['first_ip'], 'last_ip': r1['last_ip']})
-        except exc.NoResultFound:
-            r1 = []
-        try:
-            r2 = range_qry.filter_by(allocation_pool_id=pool_id,
-                                     last_ip=ip_last).one()
-            LOG.debug(_("Recycle: last match for %(first_ip)s-%(last_ip)s"),
-                      {'first_ip': r2['first_ip'], 'last_ip': r2['last_ip']})
-        except exc.NoResultFound:
-            r2 = []
-
-        if r1 and r2:
-            # Merge the two ranges
-            ip_range = models_v2.IPAvailabilityRange(
-                allocation_pool_id=pool_id,
-                first_ip=r2['first_ip'],
-                last_ip=r1['last_ip'])
-            context.session.add(ip_range)
-            LOG.debug(_("Recycle: merged %(first_ip1)s-%(last_ip1)s and "
-                        "%(first_ip2)s-%(last_ip2)s"),
-                      {'first_ip1': r2['first_ip'], 'last_ip1': r2['last_ip'],
-                       'first_ip2': r1['first_ip'], 'last_ip2': r1['last_ip']})
-            context.session.delete(r1)
-            context.session.delete(r2)
-        elif r1:
-            # Update the range with matched first IP
-            r1['first_ip'] = ip_address
-            LOG.debug(_("Recycle: updated first %(first_ip)s-%(last_ip)s"),
-                      {'first_ip': r1['first_ip'], 'last_ip': r1['last_ip']})
-        elif r2:
-            # Update the range with matched last IP
-            r2['last_ip'] = ip_address
-            LOG.debug(_("Recycle: updated last %(first_ip)s-%(last_ip)s"),
-                      {'first_ip': r2['first_ip'], 'last_ip': r2['last_ip']})
-        else:
-            # Create a new range
-            ip_range = models_v2.IPAvailabilityRange(
-                allocation_pool_id=pool_id,
-                first_ip=ip_address,
-                last_ip=ip_address)
-            context.session.add(ip_range)
-            LOG.debug(_("Recycle: created new %(first_ip)s-%(last_ip)s"),
-                      {'first_ip': ip_address, 'last_ip': ip_address})
-        NeutronIPAMController._delete_ip_allocation(
-            context, network_id, backend_subnet, ip_address)
+            subnets = [subnet]
+            return neutron_db.generate_ip(context, subnets)
 
     def deallocate_ip(self, context, backend_subnet, host, ip_address):
-        # TODO(zasimov): maybe remove this if self._check?
-        if type(backend_subnet) in (str, unicode):
-            backend_subnet = self.get_subnet_by_id(
-                context, backend_subnet)
+        # IPAllocations are automatically handled by cascade deletion
+        pass
 
-        if self._check_ip_in_allocation_pool(context, backend_subnet,
-                                             ip_address):
-            self._recycle_ip(context,
-                             backend_subnet.network_id,
-                             backend_subnet,
-                             ip_address)
-        else:
-            # IPs out of allocation pool will not be recycled, but
-            # we do need to delete the allocation from the DB
-            self._delete_ip_allocation(
-                context,
-                backend_subnet.network_id,
-                backend_subnet,
-                ip_address)
-            msg_dict = {'address': ip_address,
-                        'subnet_id': backend_subnet.id}
-            msg = _("%(address)s (%(subnet_id)s) is not "
-                    "recycled") % msg_dict
-            LOG.debug(msg)
+    def delete_network(self, context, network_id):
+        pass
 
     def set_dns_nameservers(self, context, port):
-        """This method could be called only by Infoblox logic.
-        TODO(nyakovlev@mirantis.com) Probably we should add some logic?
-        """
         pass
 
 
 class NeutronDHCPController(base.DHCPController):
+    def __init__(self, db_mgr=None):
+        if db_mgr is None:
+            db_mgr = neutron_db
+
+        self.db_manager = db_mgr
+
     def configure_dhcp(self, context, backend_subnet, dhcp_params):
         # Store information about DNS Servers
         if dhcp_params['dns_nameservers'] is not attributes.ATTR_NOT_SPECIFIED:
             for addr in dhcp_params['dns_nameservers']:
                 ns = models_v2.DNSNameServer(address=addr,
-                                             subnet_id=backend_subnet.id)
+                                             subnet_id=backend_subnet['id'])
                 context.session.add(ns)
+                backend_subnet['dns_nameservers'].append(addr)
 
         # Store host routes
         if dhcp_params['host_routes'] is not attributes.ATTR_NOT_SPECIFIED:
             for rt in dhcp_params['host_routes']:
                 route = models_v2.SubnetRoute(
-                    subnet_id=backend_subnet.id,
+                    subnet_id=backend_subnet['id'],
                     destination=rt['destination'],
                     nexthop=rt['nexthop'])
                 context.session.add(route)
-
-    def _get_dns_by_subnet(self, context, subnet_id):
-        dns_qry = context.session.query(models_v2.DNSNameServer)
-        return dns_qry.filter_by(subnet_id=subnet_id).all()
-
-    def _get_route_by_subnet(self, context, subnet_id):
-        route_qry = context.session.query(models_v2.SubnetRoute)
-        return route_qry.filter_by(subnet_id=subnet_id).all()
+                backend_subnet['host_routes'].append({
+                    'destination': rt['destination'],
+                    'nexthop': rt['nexthop']})
 
     def reconfigure_dhcp(self, context, backend_subnet, dhcp_params):
         changed_dns = False
         new_dns = []
         if "dns_nameservers" in dhcp_params:
             changed_dns = True
-            old_dns_list = self._get_dns_by_subnet(context, backend_subnet.id)
+            old_dns_list = self.db_manager.get_dns_by_subnet(
+                context, backend_subnet['id'])
             new_dns_addr_set = set(dhcp_params["dns_nameservers"])
             old_dns_addr_set = set([dns['address']
                                     for dns in old_dns_list])
@@ -429,8 +189,9 @@ class NeutronDHCPController(base.DHCPController):
             for dns_addr in new_dns_addr_set - old_dns_addr_set:
                 dns = models_v2.DNSNameServer(
                     address=dns_addr,
-                    subnet_id=backend_subnet.id)
+                    subnet_id=backend_subnet['id'])
                 context.session.add(dns)
+
             if len(dhcp_params['dns_nameservers']):
                 del dhcp_params['dns_nameservers']
 
@@ -441,8 +202,8 @@ class NeutronDHCPController(base.DHCPController):
         new_routes = []
         if "host_routes" in dhcp_params:
             changed_host_routes = True
-            old_route_list = self._get_route_by_subnet(
-                context, backend_subnet.id)
+            old_route_list = self.db_manager.get_route_by_subnet(
+                context, backend_subnet['id'])
 
             new_route_set = set([_combine(route)
                                  for route in dhcp_params['host_routes']])
@@ -458,7 +219,7 @@ class NeutronDHCPController(base.DHCPController):
                 route = models_v2.SubnetRoute(
                     destination=route_str.partition("_")[0],
                     nexthop=route_str.partition("_")[2],
-                    subnet_id=backend_subnet.id)
+                    subnet_id=backend_subnet['id'])
                 context.session.add(route)
 
             # Gather host routes for result
@@ -494,6 +255,9 @@ class NeutronDHCPController(base.DHCPController):
 
 
 class NeutronDNSController(base.DNSController):
+    """DNS controller for standard neutron behavior is not implemented because
+    neutron does not provide that functionality
+    """
     def bind_names(self, context, backend_port):
         pass
 
@@ -506,68 +270,149 @@ class NeutronDNSController(base.DNSController):
     def delete_dns_zones(self, context, backend_subnet):
         pass
 
-    def disassociate_floatingip(self, context, ip_address, port_id):
+    def disassociate_floatingip(self, context, floatingip, port_id):
         pass
 
 
-class NeutronIPAM(base.IPAM):
-    def __init__(self):
-        super(NeutronIPAM, self).__init__()
-        self.ipam_controller = NeutronIPAMController()
-        self.dhcp_controller = NeutronDHCPController()
-        self.dns_controller = NeutronDNSController()
+class NeutronIPAM(base.IPAMManager):
+    def __init__(self, dhcp_controller=None, dns_controller=None,
+                 ipam_controller=None, db_mgr=None):
+        # These should be initialized in derived DDI class
+        if dhcp_controller is None:
+            dhcp_controller = NeutronDHCPController()
+
+        if dns_controller is None:
+            dns_controller = NeutronDNSController()
+
+        if ipam_controller is None:
+            ipam_controller = NeutronIPAMController()
+
+        if db_mgr is None:
+            db_mgr = neutron_db
+
+        self.dns_controller = dns_controller
+        self.ipam_controller = ipam_controller
+        self.dhcp_controller = dhcp_controller
+        self.db_manager = db_mgr
 
     def create_subnet(self, context, subnet):
         with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).create_subnet(context, subnet)
+            # Allocate IP addresses. Create allocation pools only
+            backend_subnet = self.ipam_controller.create_subnet(context,
+                                                                subnet)
+            self.dns_controller.create_dns_zones(context, backend_subnet)
+            # Configure DHCP
+            dhcp_params = subnet
+            self.dhcp_controller.configure_dhcp(context, backend_subnet,
+                                                dhcp_params)
+
+            self.ipam_controller.get_subnet_by_id(context,
+                                                  backend_subnet['id'])
+            return backend_subnet
 
     def update_subnet(self, context, subnet_id, subnet):
         with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).update_subnet(context, subnet_id,
-                                                          subnet)
+            backend_subnet = self.ipam_controller.update_subnet(
+                context, subnet_id, subnet)
 
-    def get_subnets_by_network(self, context, network_id):
-        with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).get_subnets_by_network(context,
-                                                                   network_id)
+            # Reconfigure DHCP for subnet
+            dhcp_params = subnet
+            dhcp_changes = self.dhcp_controller.reconfigure_dhcp(
+                context, backend_subnet, dhcp_params)
 
-    def get_all_subnets(self, context):
-        with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).get_all_subnets(context)
+            return backend_subnet, dhcp_changes
 
-    def get_subnets(self, context, filters=None, fields=None,
-                    sorts=None, limit=None, marker=None,
-                    page_reverse=False):
-        with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).get_subnets(context, filters,
-                                                        fields, sorts, limit,
-                                                        marker, page_reverse)
+    def delete_subnet(self, context, subnet):
+        if isinstance(subnet, models_v2.Subnet):
+            subnet_id = subnet.id
+        else:
+            subnet_id = subnet
 
-    def get_subnets_count(self, context, filters=None):
         with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).get_subnets_count(context, filters)
+            backend_subnet = self.ipam_controller.get_subnet_by_id(context,
+                                                                   subnet_id)
+            subnet_ports = self.db_manager.get_subnet_ports(context, subnet_id)
 
-    def get_subnet_by_id(self, context, subnet_id):
-        with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).get_subnet_by_id(context,
-                                                             subnet_id)
+            ports_to_remove = [port for port in subnet_ports if
+                neutron_db.get_subnets_by_port_id(context, port.id) <= 1]
+
+            has_ports_allocated = not all(
+                p.device_owner == constants.DEVICE_OWNER_DHCP
+                for p in subnet_ports)
+
+            if has_ports_allocated:
+                raise q_exc.SubnetInUse(subnet_id=backend_subnet['id'])
+
+            self.ipam_controller.force_off_ports(context, ports_to_remove)
+            self.dns_controller.delete_dns_zones(context, backend_subnet)
+            self.dhcp_controller.disable_dhcp(context, backend_subnet)
+            self.ipam_controller.delete_subnet(context, backend_subnet)
+
+            return subnet_id
 
     def allocate_ip(self, context, host, ip):
         with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).allocate_ip(context, host, ip)
+            subnet_id = ip.get('subnet_id', None)
+            if not subnet_id:
+                LOG.debug(_("ip object must have %(subnet_id)s") % subnet_id)
+                raise
+            backend_subnet = self.ipam_controller.get_subnet_by_id(context,
+                                                                   subnet_id)
+            ip_address = self.ipam_controller.allocate_ip(
+                context,
+                backend_subnet,
+                host,
+                ip)
+
+            LOG.debug('IPAMManager allocate IP: %s' % ip_address)
+            mac_address = host['mac_address']
+            self.dhcp_controller.bind_mac(
+                context,
+                backend_subnet,
+                ip_address,
+                mac_address)
+            return ip_address
 
     def deallocate_ip(self, context, host, ip):
         with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).deallocate_ip(context, host, ip)
+            subnet_id = ip['subnet_id']
+            ip_address = ip['ip_address']
+            backend_subnet = self.ipam_controller.get_subnet_by_id(
+                context, subnet_id)
+            self.dhcp_controller.unbind_mac(
+                context,
+                backend_subnet,
+                ip_address)
+            self.ipam_controller.deallocate_ip(
+                context,
+                backend_subnet,
+                host,
+                ip_address)
 
-    def delete_subnet(self, context, subnet_id):
-        with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).delete_subnet(context, subnet_id)
+    def create_network(self, context, network):
+        return self.ipam_controller.create_network(context, network)
 
-    def delete_subnets_by_network(self, context, network_id):
-        with context.session.begin(subtransactions=True):
-            return super(NeutronIPAM, self).delete_subnets_by_network(
-                context, network_id)
+    def delete_network(self, context, network_id):
+        self.ipam_controller.delete_network(
+            context, network_id)
+
+    def create_port(self, context, port):
+        self.dns_controller.bind_names(context, port)
+        if constants.DEVICE_OWNER_DHCP == port['device_owner']:
+            self.ipam_controller.set_dns_nameservers(context, port)
+
+    def update_port(self, context, port):
+        self.dns_controller.bind_names(context, port)
+
+    def delete_port(self, context, port):
+        self.dns_controller.unbind_names(context, port)
+
+    def associate_floatingip(self, context, floatingip, port):
+        self.create_port(context, port)
+
+    def disassociate_floatingip(self, context, floatingip, port_id):
+        self.dns_controller.disassociate_floatingip(context, floatingip,
+                                                    port_id)
 
     def get_additional_network_dict_params(self, ctx, network_id):
         return {}

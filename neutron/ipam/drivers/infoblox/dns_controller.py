@@ -56,6 +56,10 @@ OPTS = [
                          help=_("Use global DNS zone. Global private DNS zone "
                                 "only make sense when we use single network "
                                 "view")),
+    neutron_conf.BoolOpt('allow_admin_network_deletion',
+                        default=False,
+                        help=_("Allow admin network which is global, "
+                               "external, or shared to be deleted"))
 ]
 
 LOG = logging.getLogger(__name__)
@@ -112,6 +116,15 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         else:
             return cfg.hostname_pattern
 
+    @staticmethod
+    def get_instancename(extattrs):
+        instance_name = None
+        if extattrs:
+            vm_attr = extattrs.get('VM Name')
+            if vm_attr:
+                instance_name = vm_attr['value']
+        return instance_name
+
     def _bind_names(self, context, backend_port, binding_func, extattrs=None):
         all_dns_members = []
 
@@ -121,14 +134,16 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             dns_members = cfg.reserve_dns_members()
             all_dns_members.extend(dns_members)
             ip_addr = ip['ip_address']
+            instance_name = self.get_instancename(extattrs)
 
             hostname_pattern = self.get_hostname_pattern(backend_port, cfg)
             pattern_builder = self.pattern_builder(hostname_pattern,
                                                    cfg.domain_suffix_pattern)
             fqdn = pattern_builder.build(
-                context, subnet, backend_port, ip_addr)
+                context, subnet, backend_port, ip_addr, instance_name)
 
-            binding_func(cfg.dns_view, ip_addr, fqdn, extattrs)
+            binding_func(cfg.network_view, cfg.dns_view, ip_addr, fqdn,
+                         extattrs)
 
         for member in set(all_dns_members):
             self.infoblox.restart_all_services(member)
@@ -223,27 +238,63 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         #       forward zone only if the subnet is only remaining subnet
         #       in the network.
         # Reverse zone is deleted when not global, not external, and not shared
-        if not (cfg.is_global_config or is_external or is_shared):
+        if neutron_conf.CONF.allow_admin_network_deletion or \
+            not (cfg.is_global_config or is_external or is_shared):
             if (
                 (
-                 '{subnet_name}' in cfg.domain_suffix_pattern or
-                 '{subnet_id}' in cfg.domain_suffix_pattern
+                  '{subnet_name}' in cfg.domain_suffix_pattern or
+                  '{subnet_id}' in cfg.domain_suffix_pattern
                 ) or
                 (
-                 ('{network_name}' in cfg.domain_suffix_pattern or
+                 (
+                   '{network_name}' in cfg.domain_suffix_pattern or
                    '{network_id}' in cfg.domain_suffix_pattern
                  ) and
-                 infoblox_db.is_last_subnet_in_network(
-                   context, backend_subnet['id'], backend_subnet['network_id'])
+                   infoblox_db.is_last_subnet_in_network(
+                     context, backend_subnet['id'],
+                     backend_subnet['network_id'])
                 ) or
-                ( '{tenant_id}' in cfg.domain_suffix_pattern and
+                (
+                  '{tenant_id}' in cfg.domain_suffix_pattern and
                   infoblox_db.is_last_subnet_in_tenant(
-                    context, backend_subnet['id'], backend_subnet['tenant_id'])
+                    context, backend_subnet['id'],
+                    backend_subnet['tenant_id'])
+                ) or
+                (
+                  self._determine_static_zone_deletion(
+                          context, backend_subnet,
+                          cfg.is_static_domain_suffix)
                 )
                ):
+                # delete forward zone
                 self.infoblox.delete_dns_zone(dnsview_name, dns_zone_fqdn)
+
             # delete reverse zone
-            self.infoblox.delete_dns_zone(dnsview_name, backend_subnet['cidr'])
+            self.infoblox.delete_dns_zone(dnsview_name,
+                                          backend_subnet['cidr'])
+
+    def _determine_static_zone_deletion(self, context,
+                                        backend_subnet, is_static):
+        """
+        Checking config if deletion is possible:
+            global tenant
+               x     x       n/a
+               o     x       cannot delete, global cannot be deleted
+               x     o       allow delete, only tenant should use
+               o     o       cannot delete, global cannot be deleted
+        If possible, then subnet must be the last one among all private
+        networks.
+        """
+        if not is_static:
+            return False
+
+        cfgs = self.config_finder.get_all_configs(context, backend_subnet)
+        for cfg in cfgs:
+            if cfg.is_global_config and cfg.is_static_domain_suffix:
+                return False
+
+        return infoblox_db.is_last_subnet_in_private_networks(
+            context, backend_subnet['id'])
 
 
 def has_nameservers(subnet):
@@ -265,6 +316,8 @@ def build_fqdn(prefix, zone, ip_address):
     ip_address = ip_address.replace('.', '-')
     if zone:
         zone.lstrip('.')
-    return "%(prefix)s%(ip_address)s.%(zone)s" % ({'prefix': prefix,
-                                                   'ip_address': ip_address,
-                                                   'zone': zone})
+    return "%(prefix)s%(ip_address)s.%(zone)s" % {
+        'prefix': prefix,
+        'ip_address': ip_address,
+        'zone': zone
+    }

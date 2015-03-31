@@ -17,12 +17,9 @@
 
 import abc
 
-from sqlalchemy.orm import exc
+import six
 
-from neutron.common import constants
-from neutron.common import exceptions as q_exc
-from neutron.db import db_base_plugin_v2
-from neutron.db import models_v2
+from neutron.ipam.drivers import neutron_db
 from neutron.openstack.common import log as logging
 
 # Ports with the following 'device_owner' values will not prevent
@@ -37,333 +34,304 @@ AUTO_DELETE_PORT_OWNERS = ['network:dhcp']
 LOG = logging.getLogger(__name__)
 
 
-class BackendController(db_base_plugin_v2.CommonDbMixin):
-    def _get_network(self, context, net_id):
-        try:
-            network = self._get_by_id(context, models_v2.Network, net_id)
-        except exc.NoResultFound:
-            raise q_exc.NetworkNotFound(net_id=net_id)
-        return network
-
-    def _get_networks_by_tenant(self, context, tenant_id):
-        net_qry = context.session.query(models_v2.Network)
-        return net_qry.filter_by(tenant_id=tenant_id).all()
-
-    def _get_subnet(self, context, subnet_id):
-        try:
-            subnet = self._get_by_id(context, models_v2.Subnet, subnet_id)
-        except exc.NoResultFound:
-            raise q_exc.SubnetNotFound(subnet_id=subnet_id)
-        return subnet
-
-    def check_network_subnet_pair(self, network, subnet):
-        pass
-
-    def get_additional_network_dict_params(self, ctx, network_id):
-        pass
-
-
-class DHCPController(BackendController):
-    __meta__ = abc.ABCMeta
+@six.add_metaclass(abc.ABCMeta)
+class DHCPController(neutron_db.NeutronPluginController):
+    """Base class for IPAM DHCP controller. Incapsulates logic for handling
+    DHCP service related actions.
+    """
 
     @abc.abstractmethod
     def configure_dhcp(self, context, backend_subnet, dhcp_params):
-        """
-        Make DHCP pools, save DHCP Gateway, save DHCP DNS names,
-        save DHCP host routes.
-        """
+        """Implement this if you need extra actions to be taken on DHCP server
+        during subnet creation.
+        :param backend_subnet: models_v2.Subnet object, represents a subnet
+         being created
+        :param dhcp_params: dict with DHCP arguments, such as dns_nameservers,
+         and host_routes
+         """
         pass
 
     @abc.abstractmethod
     def reconfigure_dhcp(self, context, backend_subnet, dhcp_params):
-        """Update DHCP pools, DHCP gateway, DNS names, Host routes."""
+        """This is called on subnet update. Implement if DHCP needs to be
+        reconfigured on subnet change
+        :param backend_subnet: models_v2.Subnet object being updated
+        :param dhcp_params: dict with DHCP parameters, such as DNS nameservers,
+         and host routes
+         """
         pass
 
     @abc.abstractmethod
     def disable_dhcp(self, context, backend_subnet):
-        """Disable DHCP Service only."""
+        """This is called on subnet delete. Implement if DHCP service needs to
+        be disabled for a given subnet.
+        :param backend_subnet: models_v2.Subnet object being deleted
+        """
         pass
 
     @abc.abstractmethod
     def dhcp_is_enabled(self, context, backend_subnet):
-        """Returns True if DHCP service is enabled for backend_subnet."""
+        """Returns True if DHDC service is enabled for a subnet, False
+        otherwise
+        :param backend_subnet: models_v2.Subnet object
+        """
         pass
 
     @abc.abstractmethod
     def get_dhcp_ranges(self, context, backend_subnet):
+        """Returns DHCP range for a subnet
+        :param backend_subnet: models_v2.Subnet object
+        """
         pass
 
     @abc.abstractmethod
     def bind_mac(self, context, backend_subnet, ip_address, mac_address):
+        """Binds IP address with MAC.
+        :param backend_subnet: models_v2.Subnet object
+        :param ip_address: IP address to be bound
+        :param mac_address: MAC address to be bound
+        """
         pass
 
     @abc.abstractmethod
     def unbind_mac(self, context, backend_subnet, ip_address):
+        """Inverse action for bind_mac.
+        :param backend_subnet: models_v2.Subnet object;
+        :param ip_address: IP address to be unbound
+        """
         pass
 
 
-class DNSController(BackendController):
-    __meta__ = abc.ABCMeta
+@six.add_metaclass(abc.ABCMeta)
+class DNSController(neutron_db.NeutronPluginController):
+    """Incapsulates DNS related logic"""
 
     @abc.abstractmethod
     def bind_names(self, context, backend_port):
+        """Associate domain name with IP address for a given port
+        :param backend_port: models_v2.Port object
+        """
         pass
 
     @abc.abstractmethod
     def unbind_names(self, context, backend_port):
+        """Disassociate domain name from a given port
+        :param backend_port: models_v2.Port object
+        """
         pass
 
     @abc.abstractmethod
     def create_dns_zones(self, context, backend_subnet):
+        """Creates domain name space for a given subnet. This is called on
+        subnet creation.
+        :param backend_subnet: models_v2.Subnet object
+        """
         pass
 
     @abc.abstractmethod
     def delete_dns_zones(self, context, backend_subnet):
+        """Deletes domain name space associated with a subnet. Called on
+        delete subnet.
+        :param backend_subnet: models_v2.Subnet object
+        """
+        pass
+
+    @abc.abstractmethod
+    def disassociate_floatingip(self, context, floatingip, port_id):
+        """Called when floating IP gets disassociated from port
+        :param floatingip: l3_db.FloatingIP object to be disassociated
+        :param port_id: UUID of a port being disassociated
+        """
         pass
 
 
-class IPAMController(BackendController):
-    __meta__ = abc.ABCMeta
+@six.add_metaclass(abc.ABCMeta)
+class IPAMController(neutron_db.NeutronPluginController):
+    """IP address management controller. Operates with higher-level entities
+    like networks, subnets and ports
+    """
 
     @abc.abstractmethod
     def create_subnet(self, context, subnet):
-        """Create allocation pools and ip ranges.
+        """Creates allocation pools and IP ranges for a subnet.
 
-        Don't store gateway address here.
-        Don't store dns names here.
-        Don't store host routes here.
-
-        Store CIDR and Allocation pools only.
-
-        subnet - validated subnet in user view (dict).
-
-        Returns backend related subnet object.
+        :param subnet: user-supplied subnet
+        :return models_v2.Subnet object.
         """
         pass
 
     @abc.abstractmethod
     def update_subnet(self, context, subnet_id, subnet):
-        """Update subnet params such as name."""
+        """Called on subnet update.
+        :param subnet_id: ID of a subnet being updated
+        :param subnet: user-supplied subnet object (dict)
+        """
         pass
 
     @abc.abstractmethod
     def delete_subnet(self, context, subnet):
-        pass
-
-    @abc.abstractmethod
-    def delete_subnets_by_network(self, context, network_id):
-        pass
-
-    @abc.abstractmethod
-    def get_subnets_by_network(self, context, network_id):
-        pass
-
-    @abc.abstractmethod
-    def get_all_subnets(self, context):
-        pass
-
-    @abc.abstractmethod
-    def get_subnet_ports(self, context, backend_subnet):
-        pass
-
-    @abc.abstractmethod
-    def get_subnets(self, context, filters=None, fields=None,
-                    sorts=None, limit=None, marker=None,
-                    page_reverse=False):
-        pass
-
-    @abc.abstractmethod
-    def get_subnets_count(self, context, filters=None):
+        """Called on subnet delete. Remove all the higher-level objects
+        associated with a subnet
+        :param subnet: user-supplied subnet object (dict)
+        """
         pass
 
     @abc.abstractmethod
     def force_off_ports(self, context, ports):
-        """Force Off ports on subnet delete event."""
+        """Disable ports on subnet delete event
+        :param ports: list of models_v2.Port objects to be disabled
+        """
         pass
 
     @abc.abstractmethod
     def get_subnet_by_id(self, context, subnet_id):
+        """Returns subnet by UUID
+        :param subnet_id: UUID of a subnet
+        """
         pass
 
     @abc.abstractmethod
     def allocate_ip(self, context, backend_subnet, host, ip=None):
+        """Allocates IP address based either on a subnet's IP range or an IP
+        address provided as an argument
+        :param backend_subnet: models_v2.Subnet object
+        :param host: port which needs IP generated
+        :param ip: IP address to be allocated for a port/host. If not set, IP
+        address will be generated from subnet range
+        :returns: IP address allocated
+        """
         pass
 
     @abc.abstractmethod
     def deallocate_ip(self, context, backend_subnet, host, ip):
+        """Frees IP allocation for a given address
+        :param backend_subnet: models_v2.Subnet object
+        :param host: host/port which has IP allocated
+        :param ip: IP address to be revoked
+        """
         pass
 
     @abc.abstractmethod
     def create_network(self, context, network):
+        """Creates network in the database
+        :param network: user-supplied network object (dict)
+        :returns: models_v2.Network object
+        """
         pass
 
     @abc.abstractmethod
     def delete_network(self, context, network_id):
+        """Deletes network from the database
+        :param network_id: UUID of a network to be deleted
+        """
         pass
 
 
-class IPAM(BackendController):
-    def __init__(self):
-        # These should be initialized in derived IPAM class
-        self.dns_controller = None
-        self.ipam_controller = None
-        self.dhcp_controller = None
+@six.add_metaclass(abc.ABCMeta)
+class IPAMManager(object):
+    """IPAM subsystem manager class which controls IPAM by calling DCHP, DNS
+    and IPAM controller methods
+    """
 
-    def _get_subnet_info(self, subnet):
-        return subnet
-
-    def _get_subnet_dns_params(self, subnet):
-        return None
-
-    def _get_subnet_dhcp_params(self, subnet):
-        return subnet
-
+    @abc.abstractmethod
     def create_subnet(self, context, subnet):
-        # Allocate IP addresses. Create allocation pools only
-        backend_subnet = self.ipam_controller.create_subnet(context, subnet)
-        self.dns_controller.create_dns_zones(context, backend_subnet)
-        # Configure DHCP
-        dhcp_params = self._get_subnet_dhcp_params(subnet)
-        self.dhcp_controller.configure_dhcp(context, backend_subnet,
-                                            dhcp_params)
-        return backend_subnet
+        """Called on subnet create event
+        :param subnet: user-supplied subnet object (dict)
+        :returns: models_v2.Subnet object being created
+        """
+        pass
 
-    def update_subnet(self, context, subnet_id, subnet):
-        backend_subnet = self.ipam_controller.update_subnet(
-            context, subnet_id, subnet)
+    @abc.abstractmethod
+    def update_subnet(self, context, id, subnet):
+        """Called on subnet update event
+        :param id: UUID of a subnet being updated
+        :param subnet: user-supplied subnet object (dict)
+        :returns: updated subnet
+        """
+        pass
 
-        # Reconfigure DHCP for subnet
-        dhcp_params = self._get_subnet_dhcp_params(subnet)
-        dhcp_changes = self.dhcp_controller.reconfigure_dhcp(
-            context, backend_subnet, dhcp_params)
-
-        return backend_subnet, dhcp_changes
-
-    def _is_auto_del_port(self, port):
-        for p in port:
-            if hasattr(port.ports, 'device_owner')\
-               and port.ports.device_owner not in AUTO_DELETE_PORT_OWNERS:
-                raise q_exc.SubnetInUse(subnet_id=port.subnet_id)
-        return True
-
+    @abc.abstractmethod
     def delete_subnet(self, context, subnet_id):
-        LOG.info('delete_subnet')
-        backend_subnet = self.ipam_controller.get_subnet_by_id(context,
-                                                               subnet_id)
-        LOG.info('getted_subnet %s' % backend_subnet)
-        subnet_ports = self.ipam_controller.get_subnet_ports(context,
-                                                             backend_subnet)
+        """Called on delete subnet event
+        :param subnet_id: UUID of a subnet to be deleted
+        """
+        pass
 
-        only_auto_del = all(self._is_auto_del_port(a)
-                            for a in subnet_ports)
-
-        if not only_auto_del:
-            raise q_exc.SubnetInUse(subnet_id=backend_subnet.id)
-
-        self.ipam_controller.force_off_ports(context, subnet_ports)
-
-        self.dns_controller.delete_dns_zones(context, backend_subnet)
-        self.dhcp_controller.disable_dhcp(context, backend_subnet)
-        self.ipam_controller.delete_subnet(context, backend_subnet)
-        LOG.info('delete_subnet DONE %s' % subnet_id)
-        return subnet_id
-
-    def delete_subnets_by_network(self, context, network_id):
-        subnets = self.ipam_controller.get_subnets_by_network(
-            context, network_id)
-        for subnet in subnets:
-            self.delete_subnet(context, subnet['id'])
-
-    def get_subnet_by_id(self, context, subnet_id):
-        return self.ipam_controller.get_subnet_by_id(context, subnet_id)
-
+    @abc.abstractmethod
     def allocate_ip(self, context, host, ip):
-        subnet_id = ip.get('subnet_id', None)
-        if not subnet_id:
-            LOG.debug(_("ip object must have %(subnet_id)s") % subnet_id)
-            raise
-        backend_subnet = self.ipam_controller.get_subnet_by_id(context,
-                                                               subnet_id)
-        ip_address = self.ipam_controller.allocate_ip(
-            context,
-            backend_subnet,
-            host,
-            ip.get('ip_address', None))
-        LOG.debug('IPAM allocate IP: %s' % ip_address)
-        if ip_address:
-            mac_address = host['mac_address']
-            self.dhcp_controller.bind_mac(
-                context,
-                backend_subnet,
-                ip_address,
-                mac_address)
-        return ip_address
+        """Called on port create event. Incapsulates logic associated with IP
+        allocation process.
+        :param host: host/port which needs IP to be allocated
+        :param ip: IP address for a port
+        """
+        pass
 
+    @abc.abstractmethod
     def deallocate_ip(self, context, host, ip):
-        subnet_id = ip['subnet_id']
-        ip_address = ip['ip_address']
-        backend_subnet = self.ipam_controller.get_subnet_by_id(
-            context, subnet_id)
-        self.dhcp_controller.unbind_mac(
-            context,
-            backend_subnet,
-            ip_address)
-        self.ipam_controller.deallocate_ip(
-            context,
-            backend_subnet,
-            host,
-            ip_address)
+        """Revoke IP allocated previously
+        :param host: host/port to have IP address deallocated
+        :param ip: IP address to revoke
+        """
+        pass
 
-    def get_subnets_by_network(self, context, network_id):
-        # TODO(zasimov): must be returns 'external' subnet objects
-        return self.ipam_controller.get_subnets_by_network(context,
-                                                           network_id)
-
-    def get_all_subnets(self, context):
-        # TODO(zasimov): must be returns 'external' subnet objects
-        return self.ipam_controller.get_all_subnets(context)
-
-    def get_subnets(self, context, filters=None, fields=None,
-                    sorts=None, limit=None, marker=None,
-                    page_reverse=False):
-        # TODO(zasimov): must be returns 'external' subnet objects
-        return self.ipam_controller.get_subnets(context, filters, fields,
-                                                sorts, limit, marker,
-                                                page_reverse)
-
-    def get_subnets_count(self, context, filters=None):
-        return self.ipam_controller.get_subnets_count(context, filters)
-
+    @abc.abstractmethod
     def create_network(self, context, network):
-        return self.ipam_controller.create_network(context, network)
+        """Called on network create event
+        :param network: user-supplied network object (dict)
+        """
+        pass
 
-    def delete_network(self, context, network_id,
-                       allowed_net_number_for_netview_delete=0):
-        self.ipam_controller.delete_network(
-            context, network_id)
+    @abc.abstractmethod
+    def delete_network(self, context, network_id):
+        """Called on delete network event
+        :param network_id: UUID of network to be deleted
+        """
+        pass
 
+    @abc.abstractmethod
     def create_port(self, context, port):
-        self.dns_controller.bind_names(context, port)
-        if constants.DEVICE_OWNER_DHCP == port['device_owner']:
-            self.ipam_controller.set_dns_nameservers(context, port)
+        """Called on port create event
+        :param port: user-supplied port dict
+        """
+        pass
 
+    @abc.abstractmethod
     def update_port(self, context, port):
-        self.dns_controller.bind_names(context, port)
+        """Called on port update event
+        :param port: user-supplied port dict
+        """
+        pass
 
+    @abc.abstractmethod
     def delete_port(self, context, port):
-        self.dns_controller.unbind_names(context, port)
+        """Called on port delete event
+        :param port: user-supplied port dict
+        """
+        pass
 
-    def update_floatingip(self, context, floatingip, port):
-        associate = floatingip['floatingip'] is not None
+    @abc.abstractmethod
+    def associate_floatingip(self, context, floatingip, port):
+        """Called on floating IP being associated with a port
+        :param floatingip: l3_db.FloatingIP object
+        :param port: models_v2.Port to be associated with floating IP
+        """
+        pass
 
-        if not port['tenant_id']:
-            port['tenant_id'] = floatingip['floatingip']['tenant_id']
+    @abc.abstractmethod
+    def disassociate_floatingip(self, context, floatingip, port_id):
+        """Inverse of associate floating IP. Removes relationship between
+        floating IP and a port
+        :param floatingip: l3_db.FloatingIP object to be disassociated from
+        port
+        :param port_id: port UUID to be disassociated from floating IP
+        """
+        pass
 
-        if associate:
-            self.create_port(context, port)
-        else:
-            self.delete_port(context, port)
-
-    def disassociate_floatingip(self, context, ip_address, port_id):
-        self.dns_controller.disassociate_floatingip(
-            context, ip_address, port_id)
+    @abc.abstractmethod
+    def get_additional_network_dict_params(self, ctx, network_id):
+        """Returns a dict of extra arguments for a network. Place your
+        implementation if neutron agent(s) require extra information to
+        provision DHCP/DNS properly
+        :param network_id: UUID of a network to have extra arguments
+        """
+        pass

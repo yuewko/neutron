@@ -76,6 +76,29 @@ OPENVSWITCH = 'openvswitch'
 ICEHOUSE = 'icehouse'
 
 
+SUPPORTED_SCHEMA_VERSIONS = [ICEHOUSE]
+
+
+def check_db_schema_version(engine, metadata):
+    """Check that current version of the db schema is supported."""
+    version_table = sa.Table(
+        'alembic_version', metadata, autoload=True, autoload_with=engine)
+    versions = [v[0] for v in engine.execute(version_table.select())]
+    if not versions:
+        raise ValueError(_("Missing version in alembic_versions table"))
+    elif len(versions) > 1:
+        raise ValueError(_("Multiple versions in alembic_versions table: %s")
+                         % versions)
+    current_version = versions[0]
+    if current_version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise SystemError(_("Unsupported database schema %(current)s. "
+                            "Please migrate your database to one of following "
+                            "versions: %(supported)s")
+                          % {'current': current_version,
+                             'supported': ', '.join(SUPPORTED_SCHEMA_VERSIONS)}
+                          )
+
+
 # Duplicated from neutron.plugins.linuxbridge.common.constants to
 # avoid having any dependency on the linuxbridge plugin being
 # installed.
@@ -104,9 +127,9 @@ class BaseMigrateToMl2_Icehouse(object):
     def __call__(self, connection_url, save_tables=False, tunnel_type=None,
                  vxlan_udp_port=None):
         engine = sa.create_engine(connection_url)
-        #TODO(marun) Check for the db version to ensure that it can be
-        #            safely migrated from.
         metadata = sa.MetaData()
+        check_db_schema_version(engine, metadata)
+
         self.define_ml2_tables(metadata)
 
         # Autoload the ports table to ensure that foreign keys to it and
@@ -147,7 +170,7 @@ class BaseMigrateToMl2_Icehouse(object):
           INSERT INTO ml2_vlan_allocations
             SELECT physical_network, vlan_id, allocated
               FROM %(source_table)s
-              WHERE allocated = 1
+              WHERE allocated = TRUE
         """) % {'source_table': self.vlan_allocation_table_name})
 
     def get_port_segment_map(self, engine):
@@ -366,7 +389,7 @@ class MigrateOpenvswitchToMl2_Icehouse(BaseMigrateToMl2_Icehouse):
               INSERT INTO ml2_gre_allocations
                 SELECT tunnel_id as gre_id, allocated
                   FROM ovs_tunnel_allocations
-                  WHERE allocated = 1
+                  WHERE allocated = TRUE
             """)
             engine.execute("""
               INSERT INTO ml2_gre_endpoints
@@ -380,7 +403,7 @@ class MigrateOpenvswitchToMl2_Icehouse(BaseMigrateToMl2_Icehouse):
               INSERT INTO ml2_vxlan_allocations
                 SELECT tunnel_id as vxlan_vni, allocated
                   FROM ovs_tunnel_allocations
-                  WHERE allocated = 1
+                  WHERE allocated = TRUE
             """)
             engine.execute(sa.text("""
               INSERT INTO ml2_vxlan_endpoints

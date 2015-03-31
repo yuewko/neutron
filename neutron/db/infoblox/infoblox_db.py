@@ -69,9 +69,17 @@ def is_last_subnet_in_tenant(context, subnet_id, tenant_id):
                     models_v2.Subnet.tenant_id == tenant_id).count() == 0
 
 
+def is_last_subnet_in_private_networks(context, subnet_id):
+    sub_qry = context.session.query(external_net_db.ExternalNetwork.network_id)
+    q = context.session.query(models_v2.Subnet.id)
+    q = q.filter(models_v2.Subnet.id != subnet_id)
+    q = q.filter(~models_v2.Subnet.network_id.in_(sub_qry))
+    return q.count() == 0
+
+
 def is_network_external(context, network_id):
-    query = context.session.query(external_net_db.ExternalNetwork)
-    return query.filter_by(network_id=network_id).count() > 0
+    q = context.session.query(external_net_db.ExternalNetwork)
+    return q.filter_by(network_id=network_id).count() > 0
 
 
 def delete_ip_allocation(context, network_id, subnet, ip_address):

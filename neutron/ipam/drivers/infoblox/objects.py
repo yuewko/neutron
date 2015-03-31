@@ -285,6 +285,12 @@ class HostRecord(IPAllocationObject):
     def __repr__(self):
         return "HostRecord{0}".format(self.to_dict())
 
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__) and
+                self.ips == other.ips and
+                self.name == other.name and
+                self.dns_view == other.dns_view)
+
     @property
     def zone_auth(self):
         return self._zone_auth
@@ -293,12 +299,6 @@ class HostRecord(IPAllocationObject):
     def zone_auth(self, value):
         if value:
             self._zone_auth = value.lstrip('.')
-
-    def __eq__(self, other):
-        return (isinstance(other, self.__class__) and
-                self.ips == other.ips and
-                self.name == other.name and
-                self.dns_view == other.dns_view)
 
 
 class HostRecordIPv4(HostRecord):

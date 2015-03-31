@@ -63,8 +63,6 @@ class PayloadMatcher(object):
 
 
 class ObjectManipulatorTestCase(base.BaseTestCase):
-    EXT_ATTRS = {'Tenant ID': {'value': '40501209848593'}}
-
     def test_create_net_view_creates_network_view_object(self):
         connector = mock.Mock()
         connector.get_object.return_value = None
@@ -73,15 +71,13 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         ibom = om.InfobloxObjectManipulator(connector)
 
         net_view_name = 'test_net_view_name'
-        ibom.create_network_view(net_view_name, self.EXT_ATTRS)
+        ibom.create_network_view(net_view_name)
 
-        get_matcher = PayloadMatcher({'name': net_view_name})
-        create_matcher = PayloadMatcher({'name': net_view_name,
-                                         'extattrs': self.EXT_ATTRS})
+        matcher = PayloadMatcher({'name': net_view_name})
         connector.get_object.assert_called_once_with(
-            'networkview', get_matcher, None, proxy=mock.ANY)
+            'networkview', matcher, None)
         connector.create_object.assert_called_once_with(
-            'networkview', create_matcher, mock.ANY)
+            'networkview', matcher, mock.ANY)
 
     def test_create_host_record_creates_host_record_object(self):
         dns_view_name = 'test_dns_view_name'
@@ -101,12 +97,11 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         ibom = om.InfobloxObjectManipulator(connector)
 
         ibom.create_host_record_for_given_ip(dns_view_name, zone_auth,
-                                             hostname, mac, ip, self.EXT_ATTRS)
+                                             hostname, mac, ip)
 
         exp_payload = {
             'name': 'test_hostname.test.dns.zone.com',
             'view': dns_view_name,
-            'extattrs': self.EXT_ATTRS,
             'ipv4addrs': [
                 {'mac': mac, 'configure_for_dhcp': True, 'ipv4addr': ip}
             ]
@@ -138,14 +133,13 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         ibom.create_host_record_from_range(
             dns_view_name, net_view_name, zone_auth, hostname, mac, first_ip,
-            last_ip, self.EXT_ATTRS)
+            last_ip)
 
         next_ip = \
             'func:nextavailableip:192.168.0.1-192.168.0.254,test_net_view_name'
         exp_payload = {
             'name': 'test_hostname.test.dns.zone.com',
             'view': dns_view_name,
-            'extattrs': self.EXT_ATTRS,
             'ipv4addrs': [
                 {'mac': mac, 'configure_for_dhcp': True, 'ipv4addr': next_ip}
             ]
@@ -168,7 +162,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         matcher = PayloadMatcher({'view': dns_view_name,
                                   PayloadMatcher.ANYKEY: ip_address})
         connector.get_object.assert_called_once_with(
-            'record:host', matcher, None, proxy=mock.ANY)
+            'record:host', matcher, None)
         connector.delete_object.assert_called_once_with(mock.ANY)
 
     def test_get_network_gets_network_object(self):
@@ -186,8 +180,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
                                   'network': cidr})
         connector.get_object.assert_called_once_with('network',
                                                      matcher,
-                                                     mock.ANY,
-                                                     proxy=mock.ANY)
+                                                     mock.ANY)
 
     def test_throws_network_not_available_on_get_network(self):
         connector = mock.Mock()
@@ -205,8 +198,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
                                   'network': cidr})
         connector.get_object.assert_called_once_with('network',
                                                      matcher,
-                                                     mock.ANY,
-                                                     proxy=mock.ANY)
+                                                     mock.ANY)
 
     def test_object_is_not_created_if_already_exists(self):
         connector = mock.Mock()
@@ -216,11 +208,11 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         net_view_name = 'test_dns_view_name'
 
-        ibom.create_network_view(net_view_name, self.EXT_ATTRS)
+        ibom.create_network_view(net_view_name)
 
         matcher = PayloadMatcher({'name': net_view_name})
         connector.get_object.assert_called_once_with(
-            'networkview', matcher, None, proxy=mock.ANY)
+            'networkview', matcher, None)
         assert not connector.create_object.called
 
     def test_get_member_gets_member_object(self):
@@ -315,13 +307,12 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         connector.get_object.return_value = None
 
         ibom = om.InfobloxObjectManipulator(connector)
-        ibom.create_ip_range(net_view, start_ip, end_ip, disable, self.EXT_ATTRS)
+        ibom.create_ip_range(net_view, start_ip, end_ip, None, disable)
 
-        assert connector.get_object.called
+        assert not connector.get_object.called
         matcher = PayloadMatcher({'start_addr': start_ip,
                                   'end_addr': end_ip,
                                   'network_view': net_view,
-                                  'extattrs': self.EXT_ATTRS,
                                   'disable': disable})
         connector.create_object.assert_called_once_with('range', matcher,
                                                         mock.ANY)
@@ -341,8 +332,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         matcher = PayloadMatcher({'start_addr': start_ip,
                                   'end_addr': end_ip,
                                   'network_view': net_view})
-        connector.get_object.assert_called_once_with('range', matcher, None,
-                                                     proxy=mock.ANY)
+        connector.get_object.assert_called_once_with('range', matcher, None)
         connector.delete_object.assert_called_once_with(mock.ANY)
 
     def test_delete_network_deletes_infoblox_network(self):
@@ -358,8 +348,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         matcher = PayloadMatcher({'network_view': net_view,
                                   'network': cidr})
-        connector.get_object.assert_called_once_with('network', matcher, None,
-                                                     proxy=mock.ANY)
+        connector.get_object.assert_called_once_with('network', matcher, None)
         connector.delete_object.assert_called_once_with(mock.ANY)
 
     def test_delete_network_view_deletes_infoblox_object(self):
@@ -374,7 +363,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         matcher = PayloadMatcher({'name': net_view})
         connector.get_object.assert_called_once_with(
-            'networkview', matcher, None, proxy=mock.ANY)
+            'networkview', matcher, None)
         connector.delete_object.assert_called_once_with(mock.ANY)
 
     def test_bind_names_updates_host_record(self):
@@ -392,7 +381,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         matcher = PayloadMatcher({'view': dns_view_name,
                                   PayloadMatcher.ANYKEY: ip})
         connector.get_object.assert_called_once_with('record:host', matcher,
-                                                     None, proxy=mock.ANY)
+                                                     None)
 
         matcher = PayloadMatcher({'name': fqdn})
         connector.update_object.assert_called_once_with(mock.ANY, matcher,
@@ -415,7 +404,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         matcher = PayloadMatcher({'view': dns_view_name,
                                   'fqdn': fqdn})
         connector.get_object.assert_called_once_with('zone_auth', matcher,
-                                                     None, proxy=mock.ANY)
+                                                     None)
 
         matcher = PayloadMatcher({'view': dns_view_name,
                                   'fqdn': fqdn,
@@ -444,12 +433,11 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
         matcher = PayloadMatcher({'view': dns_view_name,
                                   'fqdn': fqdn})
         connector.get_object.assert_called_once_with('zone_auth', matcher,
-                                                     None, proxy=mock.ANY)
+                                                     None)
 
         payload = {'view': dns_view_name,
                    'fqdn': fqdn,
                    'zone_format': zone_format,
-                   'extattrs': {},
                    'grid_primary': [{'name': primary_dns_member.name,
                                      '_struct': 'memberserver'}],
                    'grid_secondaries': [{'name': member.name,
@@ -478,8 +466,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         self.assertRaises(exceptions.InfobloxCannotAllocateIp,
                           ibom.create_host_record_for_given_ip,
-                          dns_view_name, zone_auth, hostname, mac, ip,
-                          self.EXT_ATTRS)
+                          dns_view_name, zone_auth, hostname, mac, ip)
 
     def test_create_dns_view_creates_view_object(self):
         net_view_name = 'net-view-name'
@@ -494,7 +481,7 @@ class ObjectManipulatorTestCase(base.BaseTestCase):
 
         matcher = PayloadMatcher({'name': dns_view_name,
                                   'network_view': net_view_name})
-        connector.get_object.assert_called_once_with('view', matcher, None, proxy=mock.ANY)
+        connector.get_object.assert_called_once_with('view', matcher, None)
         connector.create_object.assert_called_once_with('view', matcher, None)
 
     def test_default_net_view_is_never_deleted(self):

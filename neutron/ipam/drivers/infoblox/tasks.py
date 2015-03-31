@@ -75,7 +75,8 @@ class CreateNetworkFromTemplateTask(task.Task):
 
 class CreateIPRange(task.Task):
     def execute(self, obj_manip, net_view_name, start_ip, end_ip, disable,
-                cidr, range_extattrs, ip_version, ipv6_ra_mode=None, ipv6_address_mode=None):
+                cidr, range_extattrs, ip_version, ipv6_ra_mode=None,
+                ipv6_address_mode=None):
         obj_manip.create_ip_range(net_view_name, start_ip, end_ip,
                                   cidr, disable, range_extattrs)
 

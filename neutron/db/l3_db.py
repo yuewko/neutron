@@ -366,7 +366,7 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                             notifier_api.publisher_id('network'),
                             'router.interface.create',
                             notifier_api.CONF.default_notification_level,
-                            {'router.interface': info})
+                            {'router_interface': info})
         return info
 
     def _confirm_router_interface_not_in_use(self, context, router_id,
@@ -440,7 +440,7 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                             notifier_api.publisher_id('network'),
                             'router.interface.delete',
                             notifier_api.CONF.default_notification_level,
-                            {'router.interface': info})
+                            {'router_interface': info})
         return info
 
     def _get_floatingip(self, context, id):
@@ -663,10 +663,11 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
             fip['id'] = id
             fip_port_id = floatingip_db['floating_port_id']
             before_router_id = floatingip_db['router_id']
-            port = self._core_plugin.get_port(context.elevated(), fip_port_id)
+            port = self._core_plugin.get_port(context.elevated(),
+                                              fip_port_id)
             self._update_fip_assoc(context, fip, floatingip_db, port)
-            ipam = manager.NeutronManager.get_ipam()
-            ipam.update_floatingip(context, floatingip, port)
+            ipam = manager.NeutronManager.get_ipam_driver()
+            ipam.associate_floatingip(context, floatingip, port)
 
         router_ids = []
         if before_router_id:
@@ -720,6 +721,14 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                                     marker_obj=marker_obj,
                                     page_reverse=page_reverse)
 
+    def delete_disassociated_floatingips(self, context, network_id):
+        query = self._model_query(context, FloatingIP)
+        query = query.filter_by(floating_network_id=network_id,
+                                fixed_port_id=None,
+                                router_id=None)
+        for fip in query:
+            self.delete_floatingip(context, fip.id)
+
     def get_floatingips_count(self, context, filters=None):
         return self._get_collection_count(context, FloatingIP,
                                           filters=filters)
@@ -749,29 +758,33 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                           {'port_id': port_db['id'],
                            'port_owner': port_db['device_owner']})
 
-    def disassociate_floatingips(self, context, port_id):
-        with context.session.begin(subtransactions=True):
-            try:
-                fip_qry = context.session.query(FloatingIP)
-                floating_ip = fip_qry.filter_by(fixed_port_id=port_id).one()
+    def disassociate_floatingips(self, context, port_id, do_notify=True):
+        router_ids = []
 
-                ipam = manager.NeutronManager.get_ipam()
+        with context.session.begin(subtransactions=True):
+            fip_qry = context.session.query(FloatingIP)
+            floating_ips = fip_qry.filter_by(fixed_port_id=port_id)
+            for floating_ip in floating_ips:
+                router_ids.append(floating_ip['router_id'])
+
+                ipam = manager.NeutronManager.get_ipam_driver()
                 ipam.disassociate_floatingip(context, floating_ip, port_id)
 
-                router_id = floating_ip['router_id']
                 floating_ip.update({'fixed_port_id': None,
                                     'fixed_ip_address': None,
                                     'router_id': None})
+        if do_notify:
+            self.notify_routers_updated(context, router_ids)
+            # since caller assumes that we handled notifications on its
+            # behalf, return nothing
+            return
 
-            except exc.NoResultFound:
-                return
-            except exc.MultipleResultsFound:
-                # should never happen
-                raise Exception(_('Multiple floating IPs found for port %s')
-                                % port_id)
-        if router_id:
+        return router_ids
+
+    def notify_routers_updated(self, context, router_ids):
+        if router_ids:
             self.l3_rpc_notifier.routers_updated(
-                context, [router_id])
+                context, router_ids, 'disassociate_floatingips')
 
     def _build_routers_list(self, routers, gw_ports):
         gw_port_id_gw_port_dict = dict((gw_port['id'], gw_port)

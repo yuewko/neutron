@@ -24,6 +24,7 @@ from neutron.ipam.drivers.infoblox import dns_controller
 from neutron.ipam.drivers.infoblox import ea_manager
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import tasks
+from neutron.ipam.drivers import neutron_db
 from neutron.ipam.drivers import neutron_ipam
 from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
@@ -42,7 +43,11 @@ OPTS = [
     neutron_conf.StrOpt('dhcp_relay_management_network',
                         default=None,
                         help=_("CIDR for the management network served by "
-                               "Infoblox DHCP member"))
+                               "Infoblox DHCP member")),
+    neutron_conf.BoolOpt('allow_admin_network_deletion',
+                        default=False,
+                        help=_("Allow admin network which is global, "
+                               "external, or shared to be deleted"))
 ]
 
 neutron_conf.CONF.register_opts(OPTS)
@@ -51,7 +56,7 @@ LOG = logging.getLogger(__name__)
 
 class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
     def __init__(self, obj_manip=None, config_finder=None, ip_allocator=None,
-                 extattr_manager=None, ib_db=None):
+                 extattr_manager=None, ib_db=None, db_mgr=None):
         """IPAM backend implementation for Infoblox."""
         self.infoblox = obj_manip
         self.config_finder = config_finder
@@ -60,6 +65,11 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
 
         if extattr_manager is None:
             extattr_manager = ea_manager.InfobloxEaManager(infoblox_db)
+
+        if db_mgr is None:
+            db_mgr = neutron_db
+
+        self.db_manager = db_mgr
         self.ea_manager = extattr_manager
 
         if ib_db is None:
@@ -159,14 +169,14 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         for ip_range in subnet['allocation_pools']:
             # context.store is a global dict of method arguments for tasks in
             # current flow, hence method arguments need to be rebound
-
-            first = ip_range['first_ip']
-            last = ip_range['last_ip']
+            first = ip_range['start']
+            last = ip_range['end']
             first_ip_arg = 'ip_range %s' % first
             last_ip_arg = 'ip_range %s' % last
             method_arguments[first_ip_arg] = first
             method_arguments[last_ip_arg] = last
             task_name = '-'.join([first, last])
+
             create_subnet_flow.add(
                 tasks.CreateIPRange(name=task_name,
                                     rebind={'start_ip': first_ip_arg,
@@ -220,8 +230,11 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         is_shared = network.get('shared')
         is_external = infoblox_db.is_network_external(context,
                                                       subnet['network_id'])
-        if not (cfg.is_global_config or is_shared or is_external):
-            self.infoblox.delete_network(cfg.network_view, cidr=subnet['cidr'])
+
+        if neutron_conf.CONF.allow_admin_network_deletion or \
+            not (cfg.is_global_config or is_shared or is_external):
+            self.infoblox.delete_network(
+                cfg.network_view, cidr=subnet['cidr'])
 
         if self.ib_db.is_last_subnet(context, subnet['id']):
             cfg.member_manager.release_member(context, cfg.network_view)
@@ -254,10 +267,14 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         zone_auth = self.pattern_builder(cfg.domain_suffix_pattern).build(
             context, subnet)
 
-        if ip:
+        if ip and ip.get('ip_address', None):
+            subnet_id = ip.get('subnet_id', None)
+            ip_to_be_allocated = ip.get('ip_address', None)
             allocated_ip = self.ip_allocator.allocate_given_ip(
-                networkview_name, dnsview_name, zone_auth, hostname, mac, ip,
-                extattrs)
+                networkview_name, dnsview_name, zone_auth, hostname, mac,
+                ip_to_be_allocated, extattrs)
+            allocated_ip = {'subnet_id': subnet_id,
+                            'ip_address': allocated_ip}
         else:
             # Allocate next available considering IP ranges.
             ip_ranges = subnet['allocation_pools']
@@ -270,10 +287,13 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                     allocated_ip = self.ip_allocator.allocate_ip_from_range(
                         dnsview_name, networkview_name, zone_auth, hostname,
                         mac, first_ip, last_ip, extattrs)
+                    allocated_ip = {'subnet_id': subnet['id'],
+                                    'ip_address': allocated_ip}
+
                     break
                 except exceptions.InfobloxCannotAllocateIp:
-                    LOG.debug("No more free IP's in slice %s-%s." % (first_ip,
-                                                                     last_ip))
+                    LOG.debug("Failed to allocate IP from range (%s-%s)." %
+                              (first_ip, last_ip))
                     continue
             else:
                 # We went through all the ranges and Infoblox did not
@@ -339,7 +359,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         return network
 
     def delete_network(self, context, network_id):
-        subnets = self.get_subnets_by_network(context, network_id)
+        subnets = self.db_manager.get_subnets_by_network(context, network_id)
         net_view = infoblox_db.get_network_view(context, network_id)
 
         for subnet in subnets:

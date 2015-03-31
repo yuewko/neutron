@@ -47,6 +47,15 @@ class TestProvidernet(NsxPluginV2TestCase):
         self.assertEqual(net['network'][pnet.SEGMENTATION_ID], 411)
         self.assertEqual(net['network'][pnet.PHYSICAL_NETWORK], 'physnet1')
 
+        # Test that we can create another provider network using the same
+        # vlan_id on another physical network.
+        data['network'][pnet.PHYSICAL_NETWORK] = 'physnet2'
+        network_req = self.new_create_request('networks', data, self.fmt)
+        net = self.deserialize(self.fmt, network_req.get_response(self.api))
+        self.assertEqual(net['network'][pnet.NETWORK_TYPE], 'vlan')
+        self.assertEqual(net['network'][pnet.SEGMENTATION_ID], 411)
+        self.assertEqual(net['network'][pnet.PHYSICAL_NETWORK], 'physnet2')
+
 
 class TestMultiProviderNetworks(NsxPluginV2TestCase):
 
@@ -66,6 +75,19 @@ class TestMultiProviderNetworks(NsxPluginV2TestCase):
         self.assertEqual(network['network'][pnet.NETWORK_TYPE], 'vlan')
         self.assertEqual(network['network'][pnet.PHYSICAL_NETWORK], 'physnet1')
         self.assertEqual(network['network'][pnet.SEGMENTATION_ID], 1)
+        self.assertNotIn(mpnet.SEGMENTS, network['network'])
+
+    def test_create_network_provider_flat(self):
+        data = {'network': {'name': 'net1',
+                            pnet.NETWORK_TYPE: 'flat',
+                            pnet.PHYSICAL_NETWORK: 'physnet1',
+                            'tenant_id': 'tenant_one'}}
+        network_req = self.new_create_request('networks', data)
+        network = self.deserialize(self.fmt,
+                                   network_req.get_response(self.api))
+        self.assertEqual('flat', network['network'][pnet.NETWORK_TYPE])
+        self.assertEqual('physnet1', network['network'][pnet.PHYSICAL_NETWORK])
+        self.assertEqual(0, network['network'][pnet.SEGMENTATION_ID])
         self.assertNotIn(mpnet.SEGMENTS, network['network'])
 
     def test_create_network_single_multiple_provider(self):

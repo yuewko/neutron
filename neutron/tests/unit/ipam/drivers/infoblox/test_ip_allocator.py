@@ -71,16 +71,15 @@ class HostRecordAllocatorTestCase(base.BaseTestCase):
         hostname = 'host1'
         mac = 'de:ad:be:ef:00:00'
         ip = '192.168.1.1'
-        extattrs = 'some-extattrs'
 
         ib_mock.find_hostname.return_value = None
 
         allocator = ip_allocator.HostRecordIPAllocator(ib_mock)
         allocator.allocate_given_ip(netview, dnsview, zone_auth, hostname,
-                                    mac, ip, extattrs)
+                                    mac, ip)
 
         ib_mock.create_host_record_for_given_ip.assert_called_once_with(
-            dnsview, zone_auth, hostname, mac, ip, extattrs)
+            dnsview, zone_auth, hostname, mac, ip)
 
     def test_creates_host_record_range_on_range_allocation(self):
         ib_mock = mock.MagicMock()
@@ -92,18 +91,15 @@ class HostRecordAllocatorTestCase(base.BaseTestCase):
         mac = 'de:ad:be:ef:00:00'
         first_ip = '192.168.1.2'
         last_ip = '192.168.1.254'
-        extattrs = 'some-extattrs'
 
         ib_mock.find_hostname.return_value = None
 
         allocator = ip_allocator.HostRecordIPAllocator(ib_mock)
         allocator.allocate_ip_from_range(
-            dnsview, netview, zone_auth, hostname, mac, first_ip, last_ip,
-            extattrs)
+            dnsview, netview, zone_auth, hostname, mac, first_ip, last_ip)
 
         ib_mock.create_host_record_from_range.assert_called_once_with(
-            dnsview, netview, zone_auth, hostname, mac, first_ip, last_ip,
-            extattrs)
+            dnsview, netview, zone_auth, hostname, mac, first_ip, last_ip)
 
     def test_deletes_host_record(self):
         ib_mock = mock.MagicMock()

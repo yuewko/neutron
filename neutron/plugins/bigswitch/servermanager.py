@@ -37,8 +37,11 @@ import json
 import os
 import socket
 import ssl
+import time
+import weakref
 
 import eventlet
+import eventlet.corolocal
 from oslo.config import cfg
 
 from neutron.common import exceptions
@@ -69,8 +72,11 @@ FAILURE_CODES = [0, 301, 302, 303, 400, 401, 403, 404, 500, 501, 502, 503,
 BASE_URI = '/networkService/v1.1'
 ORCHESTRATION_SERVICE_ID = 'Neutron v2.0'
 HASH_MATCH_HEADER = 'X-BSN-BVS-HASH-MATCH'
+REQ_CONTEXT_HEADER = 'X-REQ-CONTEXT'
 # error messages
 NXNETWORK = 'NXVNS'
+HTTP_SERVICE_UNAVAILABLE_RETRY_COUNT = 3
+HTTP_SERVICE_UNAVAILABLE_RETRY_INTERVAL = 3
 
 
 class RemoteRestError(exceptions.NeutronException):
@@ -110,28 +116,32 @@ class ServerProxy(object):
 
     def get_capabilities(self):
         try:
-            body = self.rest_call('GET', CAPABILITIES_PATH)[3]
+            body = self.rest_call('GET', CAPABILITIES_PATH)[2]
             self.capabilities = json.loads(body)
         except Exception:
-            LOG.error(_("Couldn't retrieve capabilities. "
-                        "Newer API calls won't be supported."))
+            LOG.exception(_("Couldn't retrieve capabilities. "
+                            "Newer API calls won't be supported."))
         LOG.info(_("The following capabilities were received "
                    "for %(server)s: %(cap)s"), {'server': self.server,
                                                 'cap': self.capabilities})
         return self.capabilities
 
-    def rest_call(self, action, resource, data='', headers={}, timeout=False,
-                  reconnect=False):
+    def rest_call(self, action, resource, data='', headers=None,
+                  timeout=False, reconnect=False, hash_handler=None):
         uri = self.base_uri + resource
         body = json.dumps(data)
-        if not headers:
-            headers = {}
+        headers = headers or {}
         headers['Content-type'] = 'application/json'
         headers['Accept'] = 'application/json'
         headers['NeutronProxy-Agent'] = self.name
         headers['Instance-ID'] = self.neutron_id
         headers['Orchestration-Service-ID'] = ORCHESTRATION_SERVICE_ID
-        headers[HASH_MATCH_HEADER] = self.mypool.consistency_hash
+        if hash_handler:
+            # this will be excluded on calls that don't need hashes
+            # (e.g. topology sync, capability checks)
+            headers[HASH_MATCH_HEADER] = hash_handler.read_for_update()
+        else:
+            hash_handler = cdb.HashHandler()
         if 'keep-alive' in self.capabilities:
             headers['Connection'] = 'keep-alive'
         else:
@@ -178,12 +188,13 @@ class ServerProxy(object):
         try:
             self.currentconn.request(action, uri, body, headers)
             response = self.currentconn.getresponse()
-            newhash = response.getheader(HASH_MATCH_HEADER)
-            if newhash:
-                self._put_consistency_hash(newhash)
             respstr = response.read()
             respdata = respstr
             if response.status in self.success_codes:
+                hash_value = response.getheader(HASH_MATCH_HEADER)
+                # don't clear hash from DB if a hash header wasn't present
+                if hash_value is not None:
+                    hash_handler.put_hash(hash_value)
                 try:
                     respdata = json.loads(respstr)
                 except ValueError:
@@ -216,10 +227,6 @@ class ServerProxy(object):
                                                     'data': ret[3]})
         return ret
 
-    def _put_consistency_hash(self, newhash):
-        self.mypool.consistency_hash = newhash
-        cdb.put_consistency_hash(newhash)
-
 
 class ServerPool(object):
 
@@ -235,6 +242,7 @@ class ServerPool(object):
         self.neutron_id = cfg.CONF.RESTPROXY.neutron_id
         self.base_uri = base_uri
         self.name = name
+        self.contexts = {}
         self.timeout = cfg.CONF.RESTPROXY.server_timeout
         self.always_reconnect = not cfg.CONF.RESTPROXY.cache_connections
         default_port = 8000
@@ -245,10 +253,6 @@ class ServerPool(object):
         # Needs to be set by module that uses the servermanager.
         self.get_topo_function = None
         self.get_topo_function_args = {}
-
-        # Hash to send to backend with request as expected previous
-        # state to verify consistency.
-        self.consistency_hash = cdb.get_consistency_hash()
 
         if not servers:
             raise cfg.Error(_('Servers not defined. Aborting server manager.'))
@@ -267,6 +271,23 @@ class ServerPool(object):
         eventlet.spawn(self._consistency_watchdog,
                        cfg.CONF.RESTPROXY.consistency_interval)
         LOG.debug(_("ServerPool: initialization done"))
+
+    def set_context(self, context):
+        # this context needs to be local to the greenthread
+        # so concurrent requests don't use the wrong context.
+        # Use a weakref so the context is garbage collected
+        # after the plugin is done with it.
+        ref = weakref.ref(context)
+        self.contexts[eventlet.corolocal.get_ident()] = ref
+
+    def get_context_ref(self):
+        # Try to get the context cached for this thread. If one
+        # doesn't exist or if it's been garbage collected, this will
+        # just return None.
+        try:
+            return self.contexts[eventlet.corolocal.get_ident()]()
+        except KeyError:
+            return None
 
     def get_capabilities(self):
         # lookup on first try
@@ -356,7 +377,8 @@ class ServerPool(object):
         a given path.
         '''
         try:
-            cert = ssl.get_server_certificate((server, port))
+            cert = ssl.get_server_certificate((server, port),
+                                              ssl_version=ssl.PROTOCOL_TLSv1)
         except Exception as e:
             raise cfg.Error(_('Could not retrieve initial '
                               'certificate from controller %(server)s. '
@@ -394,12 +416,24 @@ class ServerPool(object):
     @utils.synchronized('bsn-rest-call')
     def rest_call(self, action, resource, data, headers, ignore_codes,
                   timeout=False):
+        context = self.get_context_ref()
+        if context:
+            # include the requesting context information if available
+            cdict = context.to_dict()
+            headers[REQ_CONTEXT_HEADER] = json.dumps(cdict)
+        hash_handler = cdb.HashHandler(context=context)
         good_first = sorted(self.servers, key=lambda x: x.failed)
         first_response = None
         for active_server in good_first:
-            ret = active_server.rest_call(action, resource, data, headers,
-                                          timeout,
-                                          reconnect=self.always_reconnect)
+            for x in range(HTTP_SERVICE_UNAVAILABLE_RETRY_COUNT + 1):
+                ret = active_server.rest_call(action, resource, data, headers,
+                                              timeout,
+                                              reconnect=self.always_reconnect,
+                                              hash_handler=hash_handler)
+                if ret[0] != httplib.SERVICE_UNAVAILABLE:
+                    break
+                time.sleep(HTTP_SERVICE_UNAVAILABLE_RETRY_INTERVAL)
+
             # If inconsistent, do a full synchronization
             if ret[0] == httplib.CONFLICT:
                 if not self.get_topo_function:
@@ -430,6 +464,13 @@ class ServerPool(object):
                            'data': ret[3]})
                 active_server.failed = True
 
+        # A failure on a delete means the object is gone from Neutron but not
+        # from the controller. Set the consistency hash to a bad value to
+        # trigger a sync on the next check.
+        # NOTE: The hash must have a comma in it otherwise it will be ignored
+        # by the backend.
+        if action == 'DELETE':
+            hash_handler.put_hash('INCONSISTENT,INCONSISTENT')
         # All servers failed, reset server list and try again next time
         LOG.error(_('ServerProxy: %(action)s failure for all servers: '
                     '%(server)r'),
@@ -439,13 +480,15 @@ class ServerPool(object):
         return first_response
 
     def rest_action(self, action, resource, data='', errstr='%s',
-                    ignore_codes=[], headers={}, timeout=False):
+                    ignore_codes=None, headers=None, timeout=False):
         """
         Wrapper for rest_call that verifies success and raises a
         RemoteRestError on failure with a provided error string
         By default, 404 errors on DELETE calls are ignored because
         they already do not exist on the backend.
         """
+        ignore_codes = ignore_codes or []
+        headers = headers or {}
         if not ignore_codes and action == 'DELETE':
             ignore_codes = [404]
         resp = self.rest_call(action, resource, data, headers, ignore_codes,
@@ -554,9 +597,13 @@ class ServerPool(object):
             # If consistency is supported, all we have to do is make any
             # rest call and the consistency header will be added. If it
             # doesn't match, the backend will return a synchronization error
-            # that will be handled by the rest_call.
+            # that will be handled by the rest_action.
             eventlet.sleep(polling_interval)
-            self.rest_call('GET', HEALTH_PATH)
+            try:
+                self.rest_action('GET', HEALTH_PATH)
+            except Exception:
+                LOG.exception(_("Encountered an error checking controller "
+                                "health."))
 
 
 class HTTPSConnectionWithValidation(httplib.HTTPSConnection):
@@ -580,8 +627,9 @@ class HTTPSConnectionWithValidation(httplib.HTTPSConnection):
         if self.combined_cert:
             self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file,
                                         cert_reqs=ssl.CERT_REQUIRED,
-                                        ca_certs=self.combined_cert)
+                                        ca_certs=self.combined_cert,
+                                        ssl_version=ssl.PROTOCOL_TLSv1)
         else:
-            self.sock = ssl.wrap_socket(sock, self.key_file,
-                                        self.cert_file,
-                                        cert_reqs=ssl.CERT_NONE)
+            self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file,
+                                        cert_reqs=ssl.CERT_NONE,
+                                        ssl_version=ssl.PROTOCOL_TLSv1)

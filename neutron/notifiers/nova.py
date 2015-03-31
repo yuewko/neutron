@@ -14,6 +14,7 @@
 #    under the License.
 
 import eventlet
+from novaclient import exceptions as nova_exceptions
 import novaclient.v1_1.client as nclient
 from novaclient.v1_1.contrib import server_external_events
 from oslo.config import cfg
@@ -125,6 +126,18 @@ class Notifier(object):
         if not cfg.CONF.notify_nova_on_port_data_changes:
             return
 
+        # When neutron re-assigns floating ip from an original instance
+        # port to a new instance port without disassociate it first, an
+        # event should be sent for original instance, that will make nova
+        # know original instance's info, and update database for it.
+        if (action == 'update_floatingip'
+                and returned_obj['floatingip'].get('port_id')
+                and original_obj.get('port_id')):
+            disassociate_returned_obj = {'floatingip': {'port_id': None}}
+            event = self.create_port_changed_event(action, original_obj,
+                                                   disassociate_returned_obj)
+            self.queue_event(event)
+
         event = self.create_port_changed_event(action, original_obj,
                                                returned_obj)
         self.queue_event(event)
@@ -219,6 +232,9 @@ class Notifier(object):
         try:
             response = self.nclient.server_external_events.create(
                 batched_events)
+        except nova_exceptions.NotFound:
+            LOG.warning(_("Nova returned NotFound for event: %s"),
+                        batched_events)
         except Exception:
             LOG.exception(_("Failed to notify nova on events: %s"),
                           batched_events)

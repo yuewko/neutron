@@ -18,7 +18,7 @@
 import os
 
 import eventlet
-import netaddr
+
 from oslo.config import cfg
 
 from neutron.agent.common import config
@@ -116,6 +116,8 @@ class DhcpAgent(manager.Manager):
 
     def call_driver(self, action, network, **action_kwargs):
         """Invoke an action on a DHCP driver instance."""
+        LOG.debug(_('Calling driver for network: %(net)s action: %(action)s'),
+                  {'net': network.id, 'action': action})
         try:
             # the Driver expects something that is duck typed similar to
             # the base models.
@@ -210,12 +212,15 @@ class DhcpAgent(manager.Manager):
         if not network.admin_state_up:
             return
 
+        enable_metadata = self.dhcp_driver_cls.should_enable_metadata(
+            self.conf, network)
+
         for subnet in network.subnets:
-            if subnet.enable_dhcp:
+            if subnet.enable_dhcp and subnet.ip_version == 4:
                 if self.call_driver('enable', network):
-                    if (self.conf.use_namespaces and
-                        self.conf.enable_isolated_metadata):
+                    if self.conf.use_namespaces and enable_metadata:
                         self.enable_isolated_metadata_proxy(network)
+                        enable_metadata = False  # Don't trigger twice
                     self.cache.put(network)
                 break
 
@@ -225,6 +230,10 @@ class DhcpAgent(manager.Manager):
         if network:
             if (self.conf.use_namespaces and
                 self.conf.enable_isolated_metadata):
+                # NOTE(jschwarz): In the case where a network is deleted, all
+                # the subnets and ports are deleted before this function is
+                # called, so checking if 'should_enable_metadata' is True
+                # for any subnet is false logic here.
                 self.disable_isolated_metadata_proxy(network)
             if self.call_driver('disable', network):
                 self.cache.remove(network)
@@ -318,10 +327,9 @@ class DhcpAgent(manager.Manager):
         # or all the networks connected via a router
         # to the one passed as a parameter
         neutron_lookup_param = '--network_id=%s' % network.id
-        meta_cidr = netaddr.IPNetwork(dhcp.METADATA_DEFAULT_CIDR)
-        has_metadata_subnet = any(netaddr.IPNetwork(s.cidr) in meta_cidr
-                                  for s in network.subnets)
-        if (self.conf.enable_metadata_network and has_metadata_subnet):
+        # When the metadata network is enabled, the proxy might
+        # be started for the router attached to the network
+        if self.conf.enable_metadata_network:
             router_ports = [port for port in network.ports
                             if (port.device_owner ==
                                 constants.DEVICE_OWNER_ROUTER_INTF)]

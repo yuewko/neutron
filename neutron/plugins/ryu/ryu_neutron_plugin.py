@@ -111,15 +111,7 @@ class RyuNeutronPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
 
     def __init__(self, configfile=None):
         super(RyuNeutronPluginV2, self).__init__()
-        self.base_binding_dict = {
-            portbindings.VIF_TYPE: portbindings.VIF_TYPE_OVS,
-            portbindings.VIF_DETAILS: {
-                # TODO(rkukura): Replace with new VIF security details
-                portbindings.CAP_PORT_FILTER:
-                'security-group' in self.supported_extension_aliases,
-                portbindings.OVS_HYBRID_PLUG: True
-            }
-        }
+        self.base_binding_dict = self._get_base_binding_dict()
         portbindings_base.register_port_dict_function()
         self.tunnel_key = db_api_v2.TunnelKey(
             cfg.CONF.OVS.tunnel_key_min, cfg.CONF.OVS.tunnel_key_max)
@@ -137,6 +129,14 @@ class RyuNeutronPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
 
         # register known all network list on startup
         self._create_all_tenant_network()
+
+    def _get_base_binding_dict(self):
+        sg_enabled = sg_rpc.is_firewall_enabled()
+        vif_details = {portbindings.CAP_PORT_FILTER: sg_enabled,
+                       portbindings.OVS_HYBRID_PLUG: sg_enabled}
+        binding = {portbindings.VIF_TYPE: portbindings.VIF_TYPE_OVS,
+                   portbindings.VIF_DETAILS: vif_details}
+        return binding
 
     def _setup_rpc(self):
         self.service_topics = {svc_constants.CORE: topics.PLUGIN,
@@ -163,10 +163,18 @@ class RyuNeutronPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
         self.tun_client.create_tunnel_key(net_id, tunnel_key)
 
     def _client_delete_network(self, net_id):
+        RyuNeutronPluginV2._safe_client_delete_network(self.safe_reference,
+                                                       net_id)
+
+    @staticmethod
+    def _safe_client_delete_network(safe_reference, net_id):
+        # Avoid handing naked plugin references to the client.  When
+        # the client is mocked for testing, such references can
+        # prevent the plugin from being deallocated.
         client.ignore_http_not_found(
-            lambda: self.client.delete_network(net_id))
+            lambda: safe_reference.client.delete_network(net_id))
         client.ignore_http_not_found(
-            lambda: self.tun_client.delete_tunnel_key(net_id))
+            lambda: safe_reference.tun_client.delete_tunnel_key(net_id))
 
     def create_network(self, context, network):
         session = context.session
@@ -202,6 +210,7 @@ class RyuNeutronPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
         session = context.session
         with session.begin(subtransactions=True):
             self.tunnel_key.delete(session, id)
+            self._process_l3_delete(context, id)
             super(RyuNeutronPluginV2, self).delete_network(context, id)
 
     def create_port(self, context, port):
@@ -227,11 +236,14 @@ class RyuNeutronPluginV2(db_base_plugin_v2.NeutronDbPluginV2,
             self.prevent_l3_port_deletion(context, id)
 
         with context.session.begin(subtransactions=True):
-            self.disassociate_floatingips(context, id)
+            router_ids = self.disassociate_floatingips(
+                context, id, do_notify=False)
             port = self.get_port(context, id)
             self._delete_port_security_group_bindings(context, id)
             super(RyuNeutronPluginV2, self).delete_port(context, id)
 
+        # now that we've left db transaction, we are safe to notify
+        self.notify_routers_updated(context, router_ids)
         self.notify_security_groups_member_updated(context, port)
 
     def update_port(self, context, id, port):

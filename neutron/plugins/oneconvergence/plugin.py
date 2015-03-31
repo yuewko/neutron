@@ -221,6 +221,7 @@ class OneConvergencePluginV2(db_base_plugin_v2.NeutronDbPluginV2,
             #get all the subnets under the network to delete them
             subnets = self._get_subnets_by_network(context, net_id)
 
+            self._process_l3_delete(context, net_id)
             super(OneConvergencePluginV2, self).delete_network(context,
                                                                net_id)
 
@@ -356,7 +357,8 @@ class OneConvergencePluginV2(db_base_plugin_v2.NeutronDbPluginV2,
 
             self._delete_port_security_group_bindings(context, port_id)
 
-            self.disassociate_floatingips(context, port_id)
+            router_ids = self.disassociate_floatingips(
+                context, port_id, do_notify=False)
 
             super(OneConvergencePluginV2, self).delete_port(context, port_id)
 
@@ -365,6 +367,8 @@ class OneConvergencePluginV2(db_base_plugin_v2.NeutronDbPluginV2,
 
             self.nvsdlib.delete_port(port_id, neutron_port)
 
+        # now that we've left db transaction, we are safe to notify
+        self.notify_routers_updated(context, router_ids)
         self.notify_security_groups_member_updated(context, neutron_port)
 
     def create_floatingip(self, context, floatingip):

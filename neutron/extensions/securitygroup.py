@@ -47,6 +47,11 @@ class SecurityGroupInvalidIcmpValue(qexception.InvalidInput):
                 "%(value)s. It must be 0 to 255.")
 
 
+class SecurityGroupMissingIcmpType(qexception.InvalidInput):
+    message = _("ICMP code (port-range-max) %(value)s is provided"
+                " but ICMP type (port-range-min) is missing.")
+
+
 class SecurityGroupInUse(qexception.InUse):
     message = _("Security Group %(id)s in use.")
 
@@ -114,7 +119,10 @@ def convert_protocol(value):
     try:
         val = int(value)
         if val >= 0 and val <= 255:
-            return val
+            # Set value of protocol number to string due to bug 1381379,
+            # PostgreSQL fails when it tries to compare integer with string,
+            # that exists in db.
+            return str(value)
         raise SecurityGroupRuleInvalidProtocol(
             protocol=value, values=sg_supported_protocols)
     except (ValueError, TypeError):

@@ -291,7 +291,11 @@ class SecurityGroupDbMixin(ext_sg.SecurityGroupPluginBase):
     def _get_ip_proto_number(self, protocol):
         if protocol is None:
             return
-        return IP_PROTOCOL_MAP.get(protocol, protocol)
+        # According to bug 1381379, protocol is always set to string to avoid
+        # problems with comparing int and string in PostgreSQL. Here this
+        # string is converted to int to give an opportunity to use it as
+        # before.
+        return int(IP_PROTOCOL_MAP.get(protocol, protocol))
 
     def _validate_port_range(self, rule):
         """Check that port_range is valid."""
@@ -313,6 +317,10 @@ class SecurityGroupDbMixin(ext_sg.SecurityGroupPluginBase):
                 if rule[attr] > 255:
                     raise ext_sg.SecurityGroupInvalidIcmpValue(
                         field=field, attr=attr, value=rule[attr])
+            if (rule['port_range_min'] is None and
+                    rule['port_range_max']):
+                raise ext_sg.SecurityGroupMissingIcmpType(
+                    value=rule['port_range_max'])
 
     def _validate_security_group_rules(self, context, security_group_rule):
         """Check that rules being installed.

@@ -762,6 +762,25 @@ class SecurityGroupAgentRpcWithDeferredRefreshTestCase(
         self.agent.refresh_firewall.assert_called_once_with(
             set(['fake_device']))
 
+    def _test_prepare_devices_filter(self, devices):
+        # simulate an RPC arriving and calling _security_group_updated()
+        self.agent.devices_to_refilter |= set(['fake_new_device'])
+
+    def test_setup_port_filters_new_port_and_rpc(self):
+        # Make sure that if an RPC arrives and adds a device to
+        # devices_to_refilter while we are in setup_port_filters()
+        # that it is not cleared, and will be processed later.
+        self.agent.prepare_devices_filter = self._test_prepare_devices_filter
+        self.agent.refresh_firewall = mock.Mock()
+        self.agent.devices_to_refilter = set(['new_device', 'fake_device'])
+        self.agent.global_refresh_firewall = False
+        self.agent.setup_port_filters(set(['new_device']), set())
+        self.assertEqual(self.agent.devices_to_refilter,
+                         set(['fake_new_device']))
+        self.assertFalse(self.agent.global_refresh_firewall)
+        self.agent.refresh_firewall.assert_called_once_with(
+            set(['fake_device']))
+
     def test_setup_port_filters_sg_updates_and_updated_ports(self):
         self.agent.prepare_devices_filter = mock.Mock()
         self.agent.refresh_firewall = mock.Mock()
@@ -1467,6 +1486,9 @@ class TestSecurityGroupAgentWithIptables(base.BaseTestCase):
         self.agent.init_firewall(defer_refresh_firewall=defer_refresh_firewall)
 
         self.iptables = self.agent.firewall.iptables
+        # TODO(jlibosva) Get rid of mocking iptables execute and mock out
+        # firewall instead
+        self.iptables.use_ipv6 = True
         self.iptables_execute = mock.patch.object(self.iptables,
                                                   "execute").start()
         self.iptables_execute_return_values = []

@@ -22,10 +22,10 @@ mm-ctl: CommandFilter, mm-ctl, root
 dhcp_release: CommandFilter, dhcp_release, root
 
 # DHCP relay specific options
-dhcrelay: CommandFilter, /usr/local/dhcp-4.3.0/sbin/dhcrelay, root
-dhclient: CommandFilter, /usr/local/dhcp-4.3.0/sbin/dhclient, root
+dhcrelay: CommandFilter, /usr/sbin/dhcrelay, root
+dhclient: CommandFilter, /sbin/dhclient, root
 dnsmasq: CommandFilter, dnsmasq, root
-kill_dhcrelay: KillFilter, root, /usr/local/dhcp-4.3.0/sbin/dhcrelay, -9
+kill_dhcrelay: KillFilter, root, /usr/sbin/dhcrelay, -9
 
 # metadata proxy
 metadata_proxy: CommandFilter, neutron-ns-metadata-proxy, root

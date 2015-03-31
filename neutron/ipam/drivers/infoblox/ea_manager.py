@@ -1,7 +1,7 @@
 # Copyright 2014 OpenStack LLC.
 # All Rights Reserved.
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
 #
@@ -318,15 +318,15 @@ def port_extattrs_result_filter_hook(query, filters):
         query, filters, models_v2.Port, 'port', ib_objtype, 'Port ID')
 
 
-if cfg.CONF.ipam_driver == 'neutron.ipam.drivers.infoblox'\
-                           '.infoblox_ipam.InfobloxIPAM':
-    db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
-        models_v2.Subnet, 'subnet_extattrs', None, None,
-        subnet_extattrs_result_filter_hook)
-
+if (cfg.CONF.ipam_driver ==
+        'neutron.ipam.drivers.infoblox.infoblox_ipam.InfobloxIPAM'):
     db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
         models_v2.Network, 'network_extattrs', None, None,
         network_extattrs_result_filter_hook)
+
+    db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
+        models_v2.Subnet, 'subnet_extattrs', None, None,
+        subnet_extattrs_result_filter_hook)
 
     db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
         models_v2.Port, 'port_extattrs', None, None,

@@ -35,6 +35,7 @@ from neutron.common import config
 from neutron.common import constants
 from neutron.common import exceptions as n_exc
 from neutron.common.test_lib import test_config
+from neutron.common import utils
 from neutron import context
 from neutron.db import api as db
 from neutron.db import db_base_plugin_v2
@@ -357,6 +358,13 @@ class NeutronDbPluginV2TestCase(testlib_api.WebTestCase):
             # Arg must be present
             if arg in kwargs:
                 data['port'][arg] = kwargs[arg]
+        # create a dhcp port device id if one hasn't been supplied
+        if ('device_owner' in kwargs and
+            kwargs['device_owner'] == constants.DEVICE_OWNER_DHCP and
+            'host' in kwargs and
+            not 'device_id' in kwargs):
+            device_id = utils.get_dhcp_agent_device_id(net_id, kwargs['host'])
+            data['port']['device_id'] = device_id
         port_req = self.new_create_request('ports', data, fmt)
         if (kwargs.get('set_context') and 'tenant_id' in kwargs):
             # create a specific auth context for this request
@@ -921,9 +929,9 @@ class TestPortsV2(NeutronDbPluginV2TestCase):
             self.skipTest("Plugin does not support native bulk port create")
         ctx = context.get_admin_context()
         with self.network() as net:
-            orig = NeutronManager._instance.plugin.create_port
-            with mock.patch.object(NeutronManager._instance.plugin,
-                                   'create_port') as patched_plugin:
+            plugin = NeutronManager.get_plugin()
+            orig = plugin.create_port
+            with mock.patch.object(plugin, 'create_port') as patched_plugin:
 
                 def side_effect(*args, **kwargs):
                     return self._fail_second_call(patched_plugin, orig,
@@ -2435,9 +2443,9 @@ class TestSubnetsV2(NeutronDbPluginV2TestCase):
     def test_create_subnets_bulk_native_plugin_failure(self):
         if self._skip_native_bulk:
             self.skipTest("Plugin does not support native bulk subnet create")
-        orig = NeutronManager._instance.plugin.create_subnet
-        with mock.patch.object(NeutronManager._instance.plugin,
-                               'create_subnet') as patched_plugin:
+        plugin = NeutronManager.get_plugin()
+        orig = plugin.create_subnet
+        with mock.patch.object(plugin, 'create_subnet') as patched_plugin:
             def side_effect(*args, **kwargs):
                 return self._fail_second_call(patched_plugin, orig,
                                               *args, **kwargs)
@@ -3732,9 +3740,7 @@ class DbModelTestCase(base.BaseTestCase):
         exp_middle = "[object at %x]" % id(network)
         exp_end_with = (" {tenant_id=None, id=None, "
                         "name='net_net', status='OK', "
-                        "admin_state_up=True, shared=None, "
-                        "dns_relay_ip=None, "
-                        "dhcp_relay_ip=None}>")
+                        "admin_state_up=True, shared=None}>")
         final_exp = exp_start_with + exp_middle + exp_end_with
         self.assertEqual(actual_repr_output, final_exp)
 
@@ -3743,9 +3749,9 @@ class TestNeutronDbPluginV2(base.BaseTestCase):
     """Unit Tests for NeutronDbPluginV2 IPAM Logic."""
 
     def test_generate_ip(self):
-        with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+        with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                '_try_generate_ip') as generate:
-            with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+            with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                    '_rebuild_availability_ranges') as rebuild:
 
                 db_base_plugin_v2.NeutronDbPluginV2._generate_ip('c', 's')
@@ -3754,9 +3760,9 @@ class TestNeutronDbPluginV2(base.BaseTestCase):
         self.assertEqual(0, rebuild.call_count)
 
     def test_generate_ip_exhausted_pool(self):
-        with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+        with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                '_try_generate_ip') as generate:
-            with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+            with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                    '_rebuild_availability_ranges') as rebuild:
 
                 exception = n_exc.IpAddressGenerationFailure(net_id='n')

@@ -125,6 +125,10 @@ class OVSBridge(BaseOVS):
             return res.strip().split('\n')
         return res
 
+    def set_secure_mode(self):
+        self.run_vsctl(['--', 'set-fail-mode', self.br_name, 'secure'],
+                       check_error=True)
+
     def set_protocols(self, protocols):
         self.run_vsctl(['--', 'set', 'bridge', self.br_name,
                         "protocols=%s" % protocols],
@@ -483,13 +487,16 @@ def get_installed_ovs_usr_version(root_helper):
 
 
 def get_installed_ovs_klm_version():
-    args = ["modinfo", "openvswitch"]
+    args_old = ["modinfo", "openvswitch"]
+    args_new = ["ovs-vswitchd", "--version"]
     try:
-        cmd = utils.execute(args)
+        cmd = utils.execute(args_old)
         for line in cmd.split('\n'):
             if 'version: ' in line and not 'srcversion' in line:
                 ver = re.findall("\d+\.\d+", line)
                 return ver[0]
+        cmd = utils.execute(args_new)
+        return re.findall("\d+\.\d+", cmd)[0]
     except Exception:
         LOG.exception(_("Unable to retrieve OVS kernel module version."))
 

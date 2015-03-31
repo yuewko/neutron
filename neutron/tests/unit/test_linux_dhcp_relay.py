@@ -92,6 +92,7 @@ class FakeV4Subnet:
 
 class FakeV4Network:
     id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    tenant_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
     subnets = [FakeV4Subnet()]
     ports = [FakePort1()]
     namespace = 'qdhcp-ns'
@@ -119,9 +120,44 @@ class TestBase(base.BaseTestCase):
         self.conf.register_opts(dhcp.OPTS)
         self.conf.register_opts(dhcp_relay.OPTS)
         self.conf.register_opts(interface.OPTS)
-        instance = mock.patch("neutron.agent.linux.dhcp.DeviceManager",
-                              FakeDeviceManager)
-        self.mock_mgr = instance.start()
+
+        def dhcp_dns_proxy_init_mock(self, conf, network, root_helper='sudo',
+                     version=None, plugin=None):
+            super(dhcp_relay.DhcpDnsProxy, self).__init__(
+                conf, network,
+                root_helper,
+                version, plugin)
+
+            external_dhcp_servers = self._get_relay_ips(
+                'external_dhcp_servers')
+            external_dns_servers = self._get_relay_ips('external_dns_servers')
+            required_options = {
+                'dhcp_relay_bridge': self.conf.dhcp_relay_bridge,
+                'external_dhcp_servers': external_dhcp_servers,
+                'external_dns_servers': external_dns_servers
+            }
+
+            for option_name, option in required_options.iteritems():
+                if not option:
+                    raise exc.InvalidConfigurationOption(
+                        opt_name=option_name,
+                        opt_value=option
+                    )
+
+            self.dev_name_len = self._calc_dev_name_len()
+            self.device_manager = mock.Mock()
+
+        dhcp_dns_proxy_mock = mock.patch(
+            "neutron.agent.linux.dhcp_relay.DhcpDnsProxy.__init__",
+            dhcp_dns_proxy_init_mock
+        )
+        dhcp_dns_proxy_mock.start()
+
+        device_manager_init = mock.patch(
+            "neutron.agent.linux.dhcp.DeviceManager.__init__",
+            lambda *args, **kwargs: None)
+        device_manager_init.start()
+
         self.conf(args=args)
         self.conf.set_override('state_path', '')
         self.conf.dhcp_relay_bridge = 'br-dhcp'
@@ -133,8 +169,20 @@ class TestBase(base.BaseTestCase):
         self.safe = self.replace_p.start()
         self.execute = self.execute_p.start()
 
+    def get_fixed_ddi_proxy(self):
+        def _get_relay_ips(self, data):
+            return ['192.168.122.32']
 
-class TestDhcpDnsProxy(TestBase):
+        attrs_to_mock = {
+            '_get_relay_ips': _get_relay_ips
+        }
+
+        with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
+                                 **attrs_to_mock):
+            return dhcp_relay.DhcpDnsProxy
+
+
+class TestDnsDhcpProxy(TestBase):
 
     def test_create_instance_no_dhcp_relay_server(self):
         self.conf.dhcp_relay_ip = None
@@ -176,12 +224,18 @@ class TestDhcpDnsProxy(TestBase):
     @mock.patch.object(dhcp_relay.DhcpDnsProxy, "_spawn_dhcp_proxy")
     @mock.patch.object(dhcp_relay.DhcpDnsProxy, "_spawn_dns_proxy")
     def test_spawn(self, mock_spawn_dns, mock_spawn_dhcp):
-        dm = dhcp_relay.DhcpDnsProxy(self.conf, self.network)
+        attrs_to_mock = {
+            '_get_relay_ips': mock.Mock(return_value=['192.168.122.32'])
+        }
 
-        dm.spawn_process()
+        with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
+                                 **attrs_to_mock):
+            dm = dhcp_relay.DhcpDnsProxy(self.conf, self.network)
 
-        mock_spawn_dns.assert_called_once_with()
-        mock_spawn_dhcp.assert_called_once_with()
+            dm.spawn_process()
+
+            mock_spawn_dns.assert_called_once_with()
+            mock_spawn_dhcp.assert_called_once_with()
 
     def test__spawn_dhcp_proxy(self):
         expected = [
@@ -204,6 +258,10 @@ class TestDhcpDnsProxy(TestBase):
             [(a, mock.DEFAULT) for a in
             ['interface_name', '_save_process_pid']]
         )
+
+        attrs_to_mock.update({
+            '_get_relay_ips': mock.Mock(return_value=['192.168.122.32'])
+        })
 
         with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
                                  **attrs_to_mock) as mocks:
@@ -236,6 +294,10 @@ class TestDhcpDnsProxy(TestBase):
             ['interface_name', '_save_process_pid']]
         )
 
+        attrs_to_mock.update({
+            '_get_relay_ips': mock.Mock(return_value=['192.168.122.32'])
+        })
+
         with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
                                  **attrs_to_mock) as mocks:
             mocks['interface_name'].__get__ = mock.Mock(return_value='tap0')
@@ -263,17 +325,25 @@ class TestDhcpDnsProxy(TestBase):
             '--bind-interfaces',
             '--interface=test_tap0',
             '--except-interface=lo',
+            '--all-servers',
             '--server=%s' % self.network.dns_relay_ip,
             '--pid-file=%s' % test_dns_conf_path
         ]
         self.execute.return_value = ('', '')
 
-        dm = dhcp_relay.DhcpDnsProxy(self.conf, self.network)
-        dm._spawn_dns_proxy()
+        attrs_to_mock = {
+            '_get_relay_ips': mock.Mock(return_value=['192.168.122.32'])
+        }
 
-        self.execute.assert_called_once_with(expected,
-                                             root_helper='sudo',
-                                             check_exit_code=True)
+        with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
+                                 **attrs_to_mock):
+
+            dm = dhcp_relay.DhcpDnsProxy(self.conf, self.network)
+            dm._spawn_dns_proxy()
+
+            self.execute.assert_called_once_with(expected,
+                                                 root_helper='sudo',
+                                                 check_exit_code=True)
 
     @mock.patch.object(dhcp_relay.DhcpDnsProxy, 'interface_name')
     @mock.patch.object(dhcp.DhcpLocalProcess, 'get_conf_file_name')
@@ -291,15 +361,21 @@ class TestDhcpDnsProxy(TestBase):
             '--bind-interfaces',
             '--interface=test_tap0',
             '--except-interface=lo',
+            '--all-servers',
             '--server=%s' % self.network.dns_relay_ip,
             '--pid-file=%s' % test_dns_conf_path
         ]
         self.execute.return_value = ('', '')
 
-        dm = dhcp_relay.DhcpDnsProxy(self.conf, self.network)
-        dm._spawn_dns_proxy()
+        attrs_to_mock = {
+            '_get_relay_ips': mock.Mock(return_value=['192.168.122.32'])}
 
-        self.execute.assert_called_once_with(expected, 'sudo')
+        with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
+                                 **attrs_to_mock):
+            dm = dhcp_relay.DhcpDnsProxy(self.conf, self.network)
+            dm._spawn_dns_proxy()
+
+            self.execute.assert_called_once_with(expected, 'sudo')
 
     @mock.patch.object(dhcp_relay.os, 'listdir',
                        mock.Mock(return_value=['1111', '2222', '3333']))
@@ -310,6 +386,9 @@ class TestDhcpDnsProxy(TestBase):
             [(a, mock.DEFAULT) for a in
             ['interface_name', 'dhcp_pid']]
         )
+
+        attrs_to_mock.update({
+            '_get_relay_ips': mock.Mock(return_value=['192.168.122.32'])})
 
         with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
                                  **attrs_to_mock) as mocks:
@@ -330,8 +409,11 @@ class TestDhcpDnsProxy(TestBase):
     def test_enable_dhcp_dns_inactive(self):
         attrs_to_mock = dict(
             [(a, mock.DEFAULT) for a in
-            ['interface_name', 'dhcp_active', 'dns_active', 'spawn_process']]
+             ['interface_name', 'dhcp_active', 'dns_active', 'spawn_process']]
         )
+
+        attrs_to_mock.update({
+            '_get_relay_ips': mock.Mock(return_value=['192.168.122.32'])})
 
         with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
                                  **attrs_to_mock) as mocks:
@@ -352,7 +434,7 @@ class TestDhcpDnsProxy(TestBase):
                 reuse_existing=True)
             mocks['spawn_process'].assert_any_call()
             dr.interface_name.__set__.assert_called_once_with(dr,
-                                                              'tap-77777777')
+                                                              mock.ANY)
 
     @mock.patch.object(dhcp_relay, '_generate_mac_address',
                        mock.Mock(return_value='77:77:77:77:77:77'))
@@ -364,8 +446,12 @@ class TestDhcpDnsProxy(TestBase):
     def test_enable_dhcp_dns_active(self):
         attrs_to_mock = dict(
             [(a, mock.DEFAULT) for a in
-            ['interface_name', 'dhcp_active', 'dns_active', 'restart']]
+            ['interface_name', 'dhcp_active', 'dns_active', 'restart',
+             '_get_relay_ips']]
         )
+
+        attrs_to_mock.update({'_get_relay_ips': mock.Mock(
+            return_value=['192.168.122.32'])})
 
         with mock.patch.multiple(dhcp_relay.DhcpDnsProxy,
                                  **attrs_to_mock) as mocks:
@@ -392,6 +478,10 @@ class TestDhcpDnsProxy(TestBase):
             ['dhcp_active', 'dns_active', 'dhcp_pid', 'dns_pid',
              '_remove_config_files']]
         )
+
+        attrs_to_mock.update({'_get_relay_ips': mock.Mock(
+            return_value=['192.168.122.32'])})
+
         kill_proc_calls = [
             mock.call(['kill', '-9', '1111'], 'sudo'),
             mock.call(['kill', '-9', '2222'], 'sudo')]
@@ -419,6 +509,10 @@ class TestDhcpDnsProxy(TestBase):
             ['dhcp_active', 'dns_active', 'dhcp_pid', 'dns_pid',
              'interface_name', '_remove_config_files']]
         )
+
+        attrs_to_mock.update({'_get_relay_ips': mock.Mock(
+            return_value=['192.168.122.32'])})
+
         kill_proc_calls = [
             mock.call(['kill', '-9', '1111'], 'sudo'),
             mock.call(['kill', '-9', '2222'], 'sudo')]

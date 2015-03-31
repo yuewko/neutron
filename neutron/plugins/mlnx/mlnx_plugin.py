@@ -379,6 +379,7 @@ class MellanoxEswitchPlugin(db_base_plugin_v2.NeutronDbPluginV2,
         session = context.session
         with session.begin(subtransactions=True):
             binding = db.get_network_binding(session, net_id)
+            self._process_l3_delete(context, net_id)
             super(MellanoxEswitchPlugin, self).delete_network(context,
                                                               net_id)
             if binding.segmentation_id != constants.LOCAL_VLAN_ID:
@@ -502,9 +503,12 @@ class MellanoxEswitchPlugin(db_base_plugin_v2.NeutronDbPluginV2,
 
         session = context.session
         with session.begin(subtransactions=True):
-            self.disassociate_floatingips(context, port_id)
+            router_ids = self.disassociate_floatingips(
+                context, port_id, do_notify=False)
             port = self.get_port(context, port_id)
             self._delete_port_security_group_bindings(context, port_id)
             super(MellanoxEswitchPlugin, self).delete_port(context, port_id)
 
+        # now that we've left db transaction, we are safe to notify
+        self.notify_routers_updated(context, router_ids)
         self.notify_security_groups_member_updated(context, port)

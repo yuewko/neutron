@@ -77,7 +77,7 @@ class InfobloxIPAM(neutron_ipam.NeutronIPAM):
         return (ip_list, ipv6_list)
 
     def get_additional_network_dict_params(self, ctx, network_id):
-        network = self.ipam_controller.ib_db.get_network(ctx, network_id)
+        network = self.ipam_controller._get_network(ctx, network_id)
 
         dns_list, dns_ipv6_list = self._collect_members_ips(
             ctx, network, models.InfobloxDNSMember)

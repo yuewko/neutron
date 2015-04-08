@@ -57,6 +57,9 @@ OPTS = [
                help=_("The type of authentication to use")),
     cfg.StrOpt('auth_region',
                help=_("Authentication region")),
+    cfg.IntOpt('interface_dev_name_len',
+               default=14,
+               help=_("Maximum interace name length")),
 ]
 
 
@@ -67,8 +70,15 @@ class LinuxInterfaceDriver(object):
     DEV_NAME_LEN = 14
     DEV_NAME_PREFIX = 'tap'
 
+    def _calc_dev_name_len(self):
+        if self.conf.interface_dev_name_len:
+            return self.conf.interface_dev_name_len
+        else:
+            return self.DEV_NAME_LEN
+
     def __init__(self, conf):
         self.conf = conf
+        self.dev_name_len = self._calc_dev_name_len()
         self.root_helper = config.get_root_helper(conf)
 
     def init_l3(self, device_name, ip_cidrs, namespace=None,
@@ -106,7 +116,7 @@ class LinuxInterfaceDriver(object):
             raise exceptions.BridgeDoesNotExist(bridge=bridge)
 
     def get_device_name(self, port):
-        return (self.DEV_NAME_PREFIX + port.id)[:self.DEV_NAME_LEN]
+        return (self.DEV_NAME_PREFIX + port.id)[:self.dev_name_len]
 
     @abc.abstractmethod
     def plug(self, network_id, port_id, device_name, mac_address,

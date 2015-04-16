@@ -16,23 +16,44 @@
 from oslo.config import cfg
 
 from neutron.db import db_base_plugin_v2
+from neutron.db import l3_db
 from neutron.db import models_v2
 from neutron.ipam.drivers.infoblox import connector
 from neutron.ipam.drivers.infoblox import constants as ib_constants
 from neutron.ipam.drivers.infoblox import exceptions
+from neutron.ipam.drivers.infoblox import l2_driver
+from neutron.ipam.drivers.infoblox import nova_manager
 from neutron.openstack.common import log as logging
+
 
 LOG = logging.getLogger(__name__)
 
 
 class InfobloxEaManager(object):
     # CMP == cloud management platform
-    OPENSTACK_OBJECT_FLAG = 'cmp_type'
+    OPENSTACK_OBJECT_FLAG = 'CMP Type'
 
     def __init__(self, infoblox_db):
         # Passing this thru constructor to avoid cyclic imports
         self.db = infoblox_db
-        self._network_l2_info_provider = self.db.NetworkL2InfoProvider()
+        self._network_l2_info_provider = l2_driver.L2Info()
+
+    def get_extattrs_for_nview(self, context):
+        """
+        Generates EAs for Network View
+        :param context: current neutron context
+        :return: dict with extensible attributes ready to be sent as part of
+        NIOS WAPI
+        """
+        os_tenant_id = context.tenant_id
+
+        attributes = {
+            'Tenant ID': os_tenant_id,
+            # OpenStack should not own entire network view,
+            # since shared or external networks may be created in it
+            'Cloud API Owned': False,
+        }
+        return self._build_extattrs(attributes)
 
     def get_extattrs_for_network(self, context, subnet=None, network=None):
         """
@@ -54,12 +75,10 @@ class InfobloxEaManager(object):
 
         os_network_id = network.get('id')
         os_network_name = network.get('name')
-        os_network_is_external = self.db.is_network_external(
-            context, network.get('id'))
-        os_network_is_shared = network.get('shared')
         os_network_l2_info = self._network_l2_info_provider.\
             get_network_l2_info(context.session, os_network_id)
-        os_network_type = os_network_l2_info.get('network_type')
+        os_network_type = os_network_l2_info.get('network_type').upper()
+
         os_segmentation_id = os_network_l2_info.get('segmentation_id')
         os_physical_network = os_network_l2_info.get('physical_network')
         os_tenant_id = (network.get('tenant_id') or
@@ -67,51 +86,131 @@ class InfobloxEaManager(object):
                         context.get('tenant_id'))
         os_user_id = context.user_id
 
-        attributes = dict(
-            os_subnet_id=os_subnet_id,
-            os_subnet_name=os_subnet_name,
-            os_network_id=os_network_id,
-            os_network_name=os_network_name,
-            os_network_is_external=os_network_is_external,
-            os_network_is_shared=os_network_is_shared,
-            os_network_type=os_network_type,
-            os_segmentation_id=os_segmentation_id,
-            os_physical_network=os_physical_network,
-            os_tenant_id=os_tenant_id,
-            os_user_id=os_user_id,
-        )
+        attributes = {
+            'Subnet ID': os_subnet_id,
+            'Subnet Name': os_subnet_name,
+            'Network ID': os_network_id,
+            'Network Name': os_network_name,
+            'Network Encap': os_network_type,
+            'Segmentation ID': os_segmentation_id,
+            'Physical Network Name': os_physical_network,
+            'Tenant ID': os_tenant_id,
+            'Account': os_user_id,
+        }
+
+        # set clowd_api_owned, is_external, is_shared from common routine
+        common_ea = self._get_common_ea(context, subnet, network)
+        attributes.update(common_ea)
 
         return self._build_extattrs(attributes)
 
-    def get_extattrs_for_ip(self, context, port):
-        os_tenant_id = port.get('tenant_id')
+    def get_extattrs_for_range(self, context, network):
+        os_user_id = context.user_id
+        os_tenant_id = context.tenant_id
+        common_ea = self._get_common_ea(context, network=network)
+
+        attributes = {
+            'Tenant ID': os_tenant_id,
+            'Account': os_user_id,
+            'Cloud API Owned': common_ea['Cloud API Owned'],
+        }
+        return self._build_extattrs(attributes)
+
+    def get_default_extattrs_for_ip(self, context):
+        attributes = {
+            'Tenant ID': context.tenant_id,
+            'Account': context.user_id,
+            'Port ID': None,
+            'Port Attached Device - Device Owner': None,
+            'Port Attached Device - Device ID': None,
+            'Cloud API Owned': True,
+            'IP Type': 'Fixed',
+            'VM ID': None,
+            'VM Name': None
+        }
+        return self._build_extattrs(attributes)
+
+    def get_extattrs_for_ip(self, context, port, ignore_instance_id=False):
+        # Fallback to 'None' as string since NIOS requires this value to be set
+        os_tenant_id = port.get('tenant_id') or context.tenant_id or 'None'
         os_user_id = context.user_id
 
         neutron_internal_services_dev_owners = \
-            ib_constants.NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP.keys()
+            ib_constants.NEUTRON_INTERNAL_SERVICE_DEVICE_OWNERS
 
-        set_os_instance_id = (port['device_owner'] not in
-                              neutron_internal_services_dev_owners)
+        # for gateway ip, no instance id exists
+        os_instance_id = None
+        os_instance_name = None
+
+        set_os_instance_id = ((not ignore_instance_id) and
+            (port['device_owner'] not in neutron_internal_services_dev_owners))
 
         if set_os_instance_id:
+            # for floating ip, no instance id exists
             os_instance_id = self._get_instance_id(context, port)
-        else:
-            os_instance_id = None
+            if os_instance_id:
+                nm = nova_manager.NovaManager()
+                os_instance_name = nm.get_instance_name_by_id(os_instance_id)
+
+        network = self.db.get_network(context, port['network_id'])
+        common_ea = self._get_common_ea(context, network=network)
 
         attributes = {
-            'os_tenant_id': os_tenant_id,
-            'os_user_id': os_user_id,
-            'os_port_id': port['id']
+            'Tenant ID': os_tenant_id,
+            'Account': os_user_id,
+            'Port ID': port['id'],
+            'Port Attached Device - Device Owner': port['device_owner'],
+            'Port Attached Device - Device ID': port['device_id'],
+            'Cloud API Owned': common_ea['Cloud API Owned'],
+            'VM ID': os_instance_id,
+            'VM Name': os_instance_name,
         }
-        if os_instance_id:
-            attributes['os_instance_id'] = os_instance_id
+
+        if self.db.is_network_external(context, port['network_id']):
+            attributes['IP Type'] = 'Floating'
+        else:
+            attributes['IP Type'] = 'Fixed'
 
         return self._build_extattrs(attributes)
 
+    def get_extattrs_for_zone(self, context, subnet=None, network=None):
+        os_user_id = context.user_id
+        os_tenant_id = context.tenant_id
+        common_ea = self._get_common_ea(context, subnet=subnet, network=None)
+
+        attributes = {
+            'Tenant ID': os_tenant_id,
+            'Account': os_user_id,
+            'Cloud API Owned': common_ea['Cloud API Owned'],
+        }
+        return self._build_extattrs(attributes)
+
+    def _get_common_ea(self, context, subnet=None, network=None):
+        if hasattr(subnet, 'external'):
+            os_network_is_external = subnet.get('external')
+        elif network:
+            os_network_is_external = self.db.is_network_external(
+                context, network.get('id'))
+        else:
+            os_network_is_external = False
+
+        if network:
+            os_network_is_shared = network.get('shared')
+        else:
+            os_network_is_shared = False
+
+        os_cloud_owned = not (os_network_is_shared or os_network_is_shared)
+        attributes = {
+            'Is External': os_network_is_external,
+            'Is Shared': os_network_is_shared,
+            'Cloud API Owned': os_cloud_owned,
+        }
+        return attributes
+
     def _get_instance_id(self, context, port):
-        network_is_external = self.db.is_network_external(
-            context, port['network_id'])
-        if network_is_external:
+        is_floatingip = port['device_owner'] == l3_db.DEVICE_OWNER_FLOATINGIP
+
+        if is_floatingip:
             os_instance_id = self.db.get_instance_id_by_floating_ip(
                 context, floating_ip_id=port['device_id'])
         else:
@@ -195,13 +294,13 @@ def _extattrs_result_filter_hook(query, filters, db_model,
 
 def subnet_extattrs_result_filter_hook(query, filters):
     return _extattrs_result_filter_hook(
-        query, filters, models_v2.Subnet, 'subnet', 'network', 'os_subnet_id')
+        query, filters, models_v2.Subnet, 'subnet', 'network', 'Subnet ID')
 
 
 def network_extattrs_result_filter_hook(query, filters):
     return _extattrs_result_filter_hook(
         query, filters, models_v2.Network, 'subnet', 'network',
-        'os_network_id')
+        'Network ID')
 
 
 def port_extattrs_result_filter_hook(query, filters):
@@ -210,16 +309,11 @@ def port_extattrs_result_filter_hook(query, filters):
     else:
         ib_objtype = 'record:a'
     return _extattrs_result_filter_hook(
-        query, filters, models_v2.Port, 'port', ib_objtype, 'os_port_id')
+        query, filters, models_v2.Port, 'port', ib_objtype, 'Port ID')
 
 
 if (cfg.CONF.ipam_driver ==
         'neutron.ipam.drivers.infoblox.infoblox_ipam.InfobloxIPAM'):
-
-    db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
-        models_v2.Port, 'port_extattrs', None, None,
-        port_extattrs_result_filter_hook)
-
     db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
         models_v2.Network, 'network_extattrs', None, None,
         network_extattrs_result_filter_hook)
@@ -227,3 +321,7 @@ if (cfg.CONF.ipam_driver ==
     db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
         models_v2.Subnet, 'subnet_extattrs', None, None,
         subnet_extattrs_result_filter_hook)
+
+    db_base_plugin_v2.NeutronDbPluginV2.register_model_query_hook(
+        models_v2.Port, 'port_extattrs', None, None,
+        port_extattrs_result_filter_hook)

@@ -12,13 +12,16 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+import operator
 
 from taskflow import task
 
+from neutron.ipam.drivers.infoblox import exceptions
+
 
 class CreateNetViewTask(task.Task):
-    def execute(self, obj_manip, net_view_name):
-        obj_manip.create_network_view(net_view_name)
+    def execute(self, obj_manip, net_view_name, nview_extattrs):
+        obj_manip.create_network_view(net_view_name, nview_extattrs)
 
     def revert(self, obj_manip, net_view_name, **kwargs):
         if not obj_manip.has_networks(net_view_name):
@@ -27,12 +30,37 @@ class CreateNetViewTask(task.Task):
 
 class CreateNetworkTask(task.Task):
     def execute(self, obj_manip, net_view_name, cidr, nameservers, dhcp_member,
-                gateway_ip, network_extattrs):
+                gateway_ip, dhcp_trel_ip, network_extattrs, related_members,
+                ip_version, ipv6_ra_mode=None, ipv6_address_mode=None):
         obj_manip.create_network(net_view_name, cidr, nameservers, dhcp_member,
-                                 gateway_ip, network_extattrs)
+                                 gateway_ip, dhcp_trel_ip, network_extattrs)
+        for member in related_members:
+            obj_manip.restart_all_services(member)
 
-    def revert(self, obj_manip, net_view_name, cidr, **kwargs):
+    def revert(self, obj_manip, net_view_name, related_members, cidr,
+               **kwargs):
         obj_manip.delete_network(net_view_name, cidr)
+        for member in related_members:
+            obj_manip.restart_all_services(member)
+
+
+class ChainInfobloxNetworkTask(task.Task):
+    def execute(self, obj_manip, net_view_name, cidr, network_extattrs):
+        ea_names = ['Is External', 'Is Shared']
+
+        eas = operator.itemgetter(*ea_names)(network_extattrs)
+        shared_or_external = any(eval(ea['value']) for ea in eas)
+
+        if shared_or_external:
+            ib_network = obj_manip.get_network(net_view_name, cidr)
+            obj_manip.update_network_options(ib_network, network_extattrs)
+        else:
+            raise exceptions.InfobloxInternalPrivateSubnetAlreadyExist()
+
+    def revert(self, obj_manip, net_view_name, cidr, network_extattrs,
+               **kwargs):
+        # keep NIOS network untouched on rollback
+        pass
 
 
 class CreateNetworkFromTemplateTask(task.Task):
@@ -46,10 +74,15 @@ class CreateNetworkFromTemplateTask(task.Task):
 
 
 class CreateIPRange(task.Task):
-    def execute(self, obj_manip, net_view_name, start_ip, end_ip, disable):
-        obj_manip.create_ip_range(net_view_name, start_ip, end_ip, disable)
+    def execute(self, obj_manip, net_view_name, start_ip, end_ip, disable,
+                cidr, range_extattrs, ip_version, ipv6_ra_mode=None,
+                ipv6_address_mode=None):
+        obj_manip.create_ip_range(net_view_name, start_ip, end_ip,
+                                  cidr, disable, range_extattrs)
 
-    def revert(self, obj_manip, net_view_name, start_ip, end_ip, **kwargs):
+    def revert(self, obj_manip, net_view_name, start_ip, end_ip,
+               ip_version, ipv6_ra_mode=None, ipv6_address_mode=None,
+               **kwargs):
         obj_manip.delete_ip_range(net_view_name, start_ip, end_ip)
 
 
@@ -64,9 +97,10 @@ class CreateDNSViewTask(task.Task):
 
 class CreateDNSZonesTask(task.Task):
     def execute(self, obj_manip, dnsview_name, fqdn, dns_member,
-                secondary_dns_members, **kwargs):
+                secondary_dns_members, zone_extattrs, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, fqdn, dns_member,
-                                  secondary_dns_members)
+                                  secondary_dns_members,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, fqdn, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, fqdn)
@@ -74,18 +108,22 @@ class CreateDNSZonesTask(task.Task):
 
 class CreateDNSZonesTaskCidr(task.Task):
     def execute(self, obj_manip, dnsview_name, cidr, dns_member, zone_format,
-                secondary_dns_members, **kwargs):
+                secondary_dns_members, prefix, zone_extattrs, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, cidr, dns_member,
                                   secondary_dns_members,
-                                  zone_format=zone_format)
+                                  prefix=prefix,
+                                  zone_format=zone_format,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, cidr, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, cidr)
 
 
 class CreateDNSZonesFromNSGroupTask(task.Task):
-    def execute(self, obj_manip, dnsview_name, fqdn, ns_group, **kwargs):
-        obj_manip.create_dns_zone(dnsview_name, fqdn, ns_group=ns_group)
+    def execute(self, obj_manip, dnsview_name, fqdn, ns_group,
+                zone_extattrs, **kwargs):
+        obj_manip.create_dns_zone(dnsview_name, fqdn, ns_group=ns_group,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, fqdn, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, fqdn)
@@ -93,10 +131,12 @@ class CreateDNSZonesFromNSGroupTask(task.Task):
 
 class CreateDNSZonesCidrFromNSGroupTask(task.Task):
     def execute(self, obj_manip, dnsview_name, cidr, ns_group, zone_format,
-                **kwargs):
+                prefix, zone_extattrs, **kwargs):
         obj_manip.create_dns_zone(dnsview_name, cidr,
                                   ns_group=ns_group,
-                                  zone_format=zone_format)
+                                  prefix=prefix,
+                                  zone_format=zone_format,
+                                  zone_extattrs=zone_extattrs)
 
     def revert(self, obj_manip, dnsview_name, cidr, **kwargs):
         obj_manip.delete_dns_zone(dnsview_name, cidr)

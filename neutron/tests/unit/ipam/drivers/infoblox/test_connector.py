@@ -29,6 +29,7 @@ valid_config.infoblox_wapi = 'http://localhost'
 valid_config.infoblox_username = 'user'
 valid_config.infoblox_password = 'pass'
 valid_config.infoblox_sslverify = False
+valid_config.infoblox_http_max_retries = 3
 
 
 class UrlMatcher(object):
@@ -92,13 +93,14 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/v1.1/network',
                 data='{"ip": "0.0.0.0"}',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
     def test_create_object_with_extattrs(self):
         objtype = 'network'
         payload = {'ip': '0.0.0.0',
-                   'extattrs': {'os_subnet_id': {'value': 'fake_subnet_id'}}}
+                   'extattrs': {'Subnet ID': {'value': 'fake_subnet_id'}}}
         with mock.patch.object(requests.Session, 'post',
                                return_value=mock.Mock()) as patched_create:
             patched_create.return_value.status_code = 201
@@ -106,9 +108,10 @@ class TestInfobloxConnector(base.BaseTestCase):
             self.connector.create_object(objtype, payload)
             patched_create.assert_called_once_with(
                 'https://infoblox.example.org/wapi/v1.1/network',
-                data='{"ip": "0.0.0.0", "extattrs": {"os_subnet_id":'
+                data='{"ip": "0.0.0.0", "extattrs": {"Subnet ID":'
                      ' {"value": "fake_subnet_id"}}}',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -123,9 +126,50 @@ class TestInfobloxConnector(base.BaseTestCase):
             patched_get.return_value.content = '{}'
             self.connector.get_object(objtype, payload)
             patched_get.assert_called_once_with(
-                'https://infoblox.example.org/wapi/v1.1/network',
-                data='{"ip": "0.0.0.0"}',
+                'https://infoblox.example.org/wapi/v1.1/network?ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
+                verify=False
+            )
+
+    def test_get_object_in_cloud(self):
+        self.config(infoblox_wapi='https://infoblox.example.org/wapi/v2.0/')
+        self.connector = connector.Infoblox()
+
+        objtype = 'network'
+        payload = {'ip': '0.0.0.0'}
+
+        with mock.patch.object(requests.Session, 'get',
+                          return_value=mock.Mock()) as patched_get:
+            patched_get.return_value.status_code = 200
+            patched_get.return_value.content = '{}'
+            self.connector.get_object(objtype, payload)
+            patched_get.assert_called_once_with(
+                'https://infoblox.example.org/wapi/v2.0/network?ip=0.0.0.0',
+                headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
+                verify=False
+            )
+
+    def test_get_objects_with_extattrs_in_cloud(self):
+        self.config(infoblox_wapi='https://infoblox.example.org/wapi/v2.0/')
+        self.connector = connector.Infoblox()
+
+        objtype = 'network'
+        payload = {'ip': '0.0.0.0'}
+        extattrs = {
+            'Subnet ID': {'value': 'fake_subnet_id'}
+        }
+        with mock.patch.object(requests.Session, 'get',
+                          return_value=mock.Mock()) as patched_get:
+            patched_get.return_value.status_code = 200
+            patched_get.return_value.content = '{}'
+            self.connector.get_object(objtype, payload, extattrs=extattrs)
+            patched_get.assert_called_once_with(
+                'https://infoblox.example.org/wapi/'
+                'v2.0/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0',
+                headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -133,7 +177,7 @@ class TestInfobloxConnector(base.BaseTestCase):
         objtype = 'network'
         payload = {'ip': '0.0.0.0'}
         extattrs = {
-            'os_subnet_id': {'value': 'fake_subnet_id'}
+            'Subnet ID': {'value': 'fake_subnet_id'}
         }
         with mock.patch.object(requests.Session, 'get',
                                return_value=mock.Mock()) as patched_get:
@@ -142,9 +186,9 @@ class TestInfobloxConnector(base.BaseTestCase):
             self.connector.get_object(objtype, payload, extattrs=extattrs)
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/'
-                'v1.1/network?*os_subnet_id=fake_subnet_id',
-                data='{"ip": "0.0.0.0"}',
+                'v1.1/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -162,6 +206,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/v1.1/network',
                 data='{"ip": "0.0.0.0"}',
                 headers={'Content-type': 'application/json'},
+                timeout=self.connector.TIMEOUT,
                 verify=False
             )
 
@@ -178,9 +223,16 @@ class TestInfobloxConnector(base.BaseTestCase):
                 verify=False
             )
 
-    def test_neutron_exception_is_raised_on_any_request_connection_error(self):
-        supported_exceptions = [req_exc.Timeout,
-                                req_exc.HTTPError,
+    def test_neutron_exception_is_raised_on_any_request_error(self):
+        # timeout exception raises InfobloxTimeoutError
+        f = mock.Mock()
+        f.__name__ = 'mock'
+        f.side_effect = req_exc.Timeout
+        self.assertRaises(exceptions.InfobloxTimeoutError,
+                          connector.reraise_neutron_exception(f))
+
+        # all other request exception raises InfobloxConnectionError
+        supported_exceptions = [req_exc.HTTPError,
                                 req_exc.ConnectionError,
                                 req_exc.ProxyError,
                                 req_exc.SSLError,
@@ -188,8 +240,25 @@ class TestInfobloxConnector(base.BaseTestCase):
                                 req_exc.InvalidURL]
 
         for exc in supported_exceptions:
-            f = mock.Mock()
-            f.__name__ = 'mock'  # functools.wraps need a name of a function
             f.side_effect = exc
             self.assertRaises(exceptions.InfobloxConnectionError,
                               connector.reraise_neutron_exception(f))
+
+    def test_non_cloud_api_detection(self):
+        wapi_not_cloud = ('https://infoblox.example.org/wapi/v1.4.1/',
+                          'https://infoblox.example.org/wapi/v1.9/',
+                          'https://wapi.wapi.wap/wapi/v1.99/')
+
+        for url in wapi_not_cloud:
+            print url
+            self.assertFalse(self.connector.is_cloud_wapi(url))
+
+    def test_cloud_api_detection(self):
+        wapi_cloud = ('https://infoblox.example.org/wapi/v2.1/',
+                      'https://infoblox.example.org/wapi/v2.0/',
+                      'https://wapi.wapi.wap/wapi/v2.0.1/',
+                      'https://wapi.wapi.wap/wapi/v3.0/',
+                      'https://wapi.wapi.wap/wapi/v11.0.1/')
+
+        for url in wapi_cloud:
+            self.assertTrue(self.connector.is_cloud_wapi(url))

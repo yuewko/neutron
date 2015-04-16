@@ -55,9 +55,9 @@ class NeutronIPAMController(base.IPAMController):
                 'gateway_ip': subnet['gateway_ip'],
                 'shared': network.shared}
         if subnet['ip_version'] == 6 and subnet['enable_dhcp']:
-            if attributes.is_attr_set(subnet['ipv6_ra_mode']):
+            if attributes.is_attr_set(subnet.get('ipv6_ra_mode')):
                 args['ipv6_ra_mode'] = subnet['ipv6_ra_mode']
-            if attributes.is_attr_set(subnet['ipv6_address_mode']):
+            if attributes.is_attr_set(subnet.get('ipv6_address_mode')):
                 args['ipv6_address_mode'] = subnet['ipv6_address_mode']
         backend_subnet = models_v2.Subnet(**args)
 
@@ -132,15 +132,16 @@ class NeutronIPAMController(base.IPAMController):
             query.delete()
 
     def allocate_ip(self, context, subnet, host, ip=None):
-        if ip is not None:
+        if ip is not None and 'ip_address' in ip:
             subnet_id = subnet['id']
-            ip_address = {'subnet_id': subnet_id, 'ip_address': ip}
-            neutron_db.allocate_specific_ip(context, subnet_id, ip)
+            ip_address = {'subnet_id': subnet_id,
+                          'ip_address': ip['ip_address']}
+            neutron_db.allocate_specific_ip(
+                context, subnet_id, ip['ip_address'])
             return ip_address
         else:
-            if isinstance(subnet, models_v2.Subnet):
-                subnet = [subnet]
-            return neutron_db.generate_ip(context, subnet)
+            subnets = [subnet]
+            return neutron_db.generate_ip(context, subnets)
 
     def deallocate_ip(self, context, backend_subnet, host, ip_address):
         # IPAllocations are automatically handled by cascade deletion
@@ -279,6 +280,9 @@ class NeutronDNSController(base.DNSController):
         pass
 
     def delete_dns_zones(self, context, backend_subnet):
+        pass
+
+    def disassociate_floatingip(self, context, floatingip, port_id):
         pass
 
 
@@ -433,12 +437,12 @@ class NeutronIPAM(base.IPAMManager):
     def delete_port(self, context, port):
         self.dns_controller.unbind_names(context, port)
 
-    def configure_floatingip(self, context, floatingip, port):
-        associate = floatingip['floatingip'] is not None
-        if associate:
-            self.create_port(context, port)
-        else:
-            self.delete_port(context, port)
+    def associate_floatingip(self, context, floatingip, port):
+        self.create_port(context, port)
+
+    def disassociate_floatingip(self, context, floatingip, port_id):
+        self.dns_controller.disassociate_floatingip(context, floatingip,
+                                                    port_id)
 
     def get_additional_network_dict_params(self, ctx, network_id):
         return {}

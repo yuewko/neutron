@@ -88,7 +88,7 @@ class ConfigFinderTestCase(base.BaseTestCase):
         """
 
         # configuration is considered invalid if JSON parser has failed
-        self.assertRaises(exceptions.InfobloxInvalidConditionalConfig,
+        self.assertRaises(exceptions.InfobloxConfigException,
                           config.ConfigFinder,
                           stream=io.BytesIO(invalid_config),
                           member_manager=mock.Mock())
@@ -140,7 +140,7 @@ class ConfigFinderTestCase(base.BaseTestCase):
     @mock.patch('neutron.db.infoblox.infoblox_db.is_network_external')
     def test_subnet_range_condition_matches(self, is_external):
         expected_cidr = '10.0.0.0/24'
-        expected_condition = 'subnet_range:{}'.format(expected_cidr)
+        expected_condition = 'subnet_range:{0}'.format(expected_cidr)
         external_config = """
             [
                 {{
@@ -185,7 +185,7 @@ class ConfigFinderTestCase(base.BaseTestCase):
     @mock.patch('neutron.db.infoblox.infoblox_db.is_network_external')
     def test_tenant_id_condition_matches(self, is_external_mock):
         expected_tenant_id = 'some-tenant-id'
-        expected_condition = 'tenant_id:{}'.format(expected_tenant_id)
+        expected_condition = 'tenant_id:{0}'.format(expected_tenant_id)
         tenant_id_conf = """
             [
                 {{
@@ -245,13 +245,13 @@ class ConfigFinderTestCase(base.BaseTestCase):
             valid_conf = config_template.format(condition=valid)
             try:
                 config.ConfigFinder(io.BytesIO(valid_conf), member_manager)
-            except exceptions.InfobloxInvalidConditionalConfig as e:
+            except exceptions.InfobloxConfigException as e:
                 msg = 'Unexpected {error_type} for {config}'.format(
                     error_type=type(e), config=valid_conf)
                 self.fail(msg)
 
         invalid_cof = config_template.format(condition='invalid-condition')
-        self.assertRaises(exceptions.InfobloxInvalidConditionalConfig,
+        self.assertRaises(exceptions.InfobloxConfigException,
                           config.ConfigFinder, io.BytesIO(invalid_cof),
                           member_manager)
 
@@ -268,7 +268,7 @@ class ConfigFinderTestCase(base.BaseTestCase):
         subnet = mock.MagicMock()
 
         cf = config.ConfigFinder(io.BytesIO(cfg), member_manager=mock.Mock())
-        self.assertRaises(exceptions.InfobloxNoConfigFoundForSubnet,
+        self.assertRaises(exceptions.InfobloxConfigException,
                           cf.find_config_for_subnet, context, subnet)
 
 
@@ -277,7 +277,7 @@ class ConfigTestCase(base.BaseTestCase):
         context = mock.Mock()
         subnet = mock.Mock()
 
-        self.assertRaises(exceptions.InfobloxInvalidConditionalConfig,
+        self.assertRaises(exceptions.InfobloxConfigException,
                           config.Config, {}, context, subnet,
                           member_manager=mock.Mock())
 
@@ -303,8 +303,8 @@ class ConfigTestCase(base.BaseTestCase):
         subnet = mock.Mock()
 
         expected_member_name = 'some-dhcp-member.com'
-        expected_dhcp_member = objects.Member(name=expected_member_name,
-                                              ip='some-ip')
+        expected_dhcp_member = [objects.Member(name=expected_member_name,
+                                               ip='some-ip')]
 
         conf_dict = {
             'condition': 'global',
@@ -312,11 +312,11 @@ class ConfigTestCase(base.BaseTestCase):
         }
 
         member_manager = mock.Mock()
-        member_manager.find_member.return_value = expected_dhcp_member
+        member_manager.find_members.return_value = expected_dhcp_member
         cfg = config.Config(conf_dict, context, subnet, member_manager)
 
-        self.assertEqual(cfg.dhcp_member, expected_dhcp_member)
-        assert member_manager.find_member.called
+        self.assertEqual(cfg.dhcp_members, expected_dhcp_member)
+        assert member_manager.find_members.called
         assert not member_manager.next_available.called
         assert not member_manager.reserve_member.called
 
@@ -327,7 +327,7 @@ class ConfigTestCase(base.BaseTestCase):
         expected_member = objects.Member('some-member-ip', 'some-member-name')
 
         member_manager = mock.Mock()
-        member_manager.find_member.return_value = None
+        member_manager.find_members.return_value = None
         member_manager.next_available.return_value = expected_member
 
         conf_dict = {
@@ -338,7 +338,7 @@ class ConfigTestCase(base.BaseTestCase):
         cfg = config.Config(conf_dict, context, subnet, member_manager)
         members = cfg.reserve_dhcp_members()
         self.assertEqual(members[0], expected_member)
-        assert member_manager.find_member.called_once
+        assert member_manager.find_members.called_once
         assert member_manager.next_available.called_once
         assert member_manager.reserve_meber.called_once
 
@@ -423,7 +423,7 @@ class ConfigTestCase(base.BaseTestCase):
 
         member_manager = mock.Mock()
         member_manager.get_member = mock_get_member
-        member_manager.find_member = mock.Mock(return_value=None)
+        member_manager.find_members = mock.Mock(return_value=None)
 
         cfg = config.Config(conf, context, subnet, member_manager)
         cfg._dhcp_members = members
@@ -440,6 +440,7 @@ class ConfigTestCase(base.BaseTestCase):
     def test_subnet_update_not_allowed_if_subnet_name_is_in_pattern(self):
         context = mock.Mock()
         subnet = mock.Mock()
+        subnet_new = mock.Mock()
         member_manager = mock.Mock()
 
         cfg = {
@@ -450,11 +451,12 @@ class ConfigTestCase(base.BaseTestCase):
 
         conf = config.Config(cfg, context, subnet, member_manager)
         self.assertRaises(exceptions.OperationNotAllowed,
-                          conf.verify_subnet_update_is_allowed)
+                          conf.verify_subnet_update_is_allowed, subnet_new)
 
     def test_subnet_update_is_allowed_if_subnet_name_is_not_in_pattern(self):
         context = mock.Mock()
         subnet = mock.Mock()
+        subnet_new = mock.Mock()
         member_manager = mock.Mock()
 
         allowed_suffixes = [
@@ -478,19 +480,71 @@ class ConfigTestCase(base.BaseTestCase):
 
             conf = config.Config(cfg, context, subnet, member_manager)
             try:
-                conf.verify_subnet_update_is_allowed()
+                conf.verify_subnet_update_is_allowed(subnet_new)
             except exceptions.OperationNotAllowed as e:
                 self.fail('Unexpected exception {}'.format(e))
+
+    def test_same_configs_are_equal(self):
+        member_manager = mock.Mock()
+        context = mock.Mock()
+        subnet = mock.Mock()
+
+        cfg = {
+            'condition': 'global',
+            'network_view': 'netview',
+            'dns_view': 'dnsview',
+            'dhcp_members': ['m1', 'm2', 'm3'],
+            'dns_members': ['m1', 'm2', 'm3']
+        }
+
+        c1 = config.Config(cfg, context, subnet, member_manager)
+        c2 = config.Config(cfg, context, subnet, member_manager)
+
+        self.assertTrue(c1 == c1)
+        self.assertTrue(c1 == c2)
+        self.assertTrue(c2 == c1)
+        self.assertTrue(c2 == c2)
+        self.assertTrue(c1 != object())
+        self.assertTrue(c2 != object())
+
+    def test_same_configs_are_not_added_to_set(self):
+        member_manager = mock.Mock()
+        context = mock.Mock()
+        subnet = mock.Mock()
+
+        cfg = {
+            'condition': 'global',
+            'network_view': 'netview',
+            'dns_view': 'dnsview',
+            'dhcp_members': ['m1', 'm2', 'm3'],
+            'dns_members': ['m1', 'm2', 'm3']
+        }
+
+        s = set()
+
+        for _ in xrange(10):
+            s.add(config.Config(cfg, context, subnet, member_manager))
+
+        self.assertEqual(len(s), 1)
+
+        cfg['condition'] = 'tenant'
+        s.add(config.Config(cfg, context, subnet, member_manager))
+        self.assertEqual(len(s), 2)
+
+        s.add(config.Config(cfg, context, subnet, member_manager))
+        self.assertEqual(len(s), 2)
 
 
 class MemberManagerTestCase(base.BaseTestCase):
     def test_raises_error_if_no_config_file(self):
-        self.assertRaises(exceptions.ConfigNotFound, config.MemberManager)
+        self.assertRaises(exceptions.InfobloxConfigException,
+                          config.MemberManager)
 
     def test_returns_next_unused_member(self):
         context = mock.MagicMock()
         member_config = [{"name": "member%d" % i,
-                          "ipv4addr": "192.168.1.%d" % i}
+                          "ipv4addr": "192.168.1.%d" % i,
+                          "ipv6addr": "2001:DB8::%s" % i}
                          for i in xrange(1, 5)]
 
         used_members = [member_config[i]['name'] for i in xrange(3)]
@@ -511,7 +565,8 @@ class MemberManagerTestCase(base.BaseTestCase):
     def test_raises_no_member_available_if_all_members_used(self):
         context = mock.MagicMock()
         member_config = [{"name": "member%d" % i,
-                          "ipv4addr": "192.168.1.%d" % i}
+                          "ipv4addr": "192.168.1.%d" % i,
+                          "ipv6addr": "2001:DB8::%s" % i}
                          for i in xrange(1, 5)]
 
         used_members = [member_config[i]['name']
@@ -521,7 +576,7 @@ class MemberManagerTestCase(base.BaseTestCase):
 
         with mock.patch.object(infoblox_db, 'get_used_members',
                                mock.Mock(return_value=used_members)):
-            self.assertRaises(exceptions.NoInfobloxMemberAvailable,
+            self.assertRaises(exceptions.InfobloxConfigException,
                               mm.next_available, context)
 
     def test_reserve_member_stores_member_in_db(self):
@@ -541,20 +596,25 @@ class MemberManagerTestCase(base.BaseTestCase):
     def test_finds_member_for_mapping(self):
         context = mock.Mock()
         mapping = 'some-mapping-value'
-        expected_member = 'member1'
+        expected_member_name = 'member1'
         expected_ip = '10.0.0.1'
+        expected_ipv6 = '2001:DB8::3'
+
+        expected_member = objects.Member(expected_ip, expected_member_name, expected_ipv6)
+        expected_members = [ expected_member ]
 
         mm = config.MemberManager(
-            io.BytesIO(jsonutils.dumps([{'name': expected_member,
-                                    'ipv4addr': expected_ip}])))
+            io.BytesIO(jsonutils.dumps([{'name': expected_member_name,
+                                    'ipv4addr': expected_ip,
+                                    'ipv6addr': expected_ipv6}])))
 
-        with mock.patch.object(infoblox_db, 'get_member') as get_mock:
-            get_mock.return_value = expected_member
-            member = mm.find_member(context, mapping,
-                                    models.DHCP_MEMBER_TYPE)
+        with mock.patch.object(infoblox_db, 'get_members') as get_mock:
+            get_mock.return_value = expected_members
+            members = mm.find_members(context, mapping,
+                                     models.DHCP_MEMBER_TYPE)
 
-            self.assertEqual(expected_ip, member.ip)
-            self.assertEqual(expected_member, member.name)
+            self.assertEqual(expected_ip, members[0].ip)
+            self.assertEqual(expected_members[0].name, members[0].name)
 
     def test_builds_member_from_config(self):
         ip = 'some-ip'
@@ -562,7 +622,8 @@ class MemberManagerTestCase(base.BaseTestCase):
 
         mm = config.MemberManager(
             io.BytesIO(jsonutils.dumps([{'name': name,
-                                    'ipv4addr': ip}])))
+                                    'ipv4addr': ip,
+                                    'ipv6addr': ip}])))
 
         m = mm.get_member(name)
 
@@ -576,18 +637,22 @@ class MemberManagerTestCase(base.BaseTestCase):
 
         mm = config.MemberManager(
             io.BytesIO(jsonutils.dumps([{'name': actual_name,
-                                    'ipv4addr': ip}])))
+                                    'ipv4addr': ip,
+                                    'ipv6addr': ip}])))
 
-        self.assertRaises(exceptions.NoInfobloxMemberAvailable, mm.get_member,
+        self.assertRaises(exceptions.InfobloxConfigException, mm.get_member,
                           search_for_name)
 
     def test_member_marked_as_unavailable(self):
         expected_ip = "192.168.1.2"
+        expected_ipv6 = "2001:DB8::3"
         expected_name = "available_member"
         member_config = [{"name": expected_name,
-                          "ipv4addr": expected_ip},
+                          "ipv4addr": expected_ip,
+                          "ipv6addr": expected_ipv6},
                          {"name": "unavailable_member",
                           "ipv4addr": "192.168.1.3",
+                          "ipv6addr": "2001:DB8::3",
                           "is_available": False}]
 
         expected_member = objects.Member(ip=expected_ip, name=expected_name)
@@ -606,7 +671,7 @@ class MemberManagerTestCase(base.BaseTestCase):
         """
 
         self.assertRaises(
-            exceptions.InfobloxInvalidConditionalConfig,
+            exceptions.InfobloxConfigException,
             config.ConfigFinder,
             stream=io.BytesIO(valid_config),
             member_manager=mock.Mock()
@@ -622,7 +687,7 @@ class MemberManagerTestCase(base.BaseTestCase):
         """
 
         self.assertRaises(
-            exceptions.InfobloxInvalidConditionalConfig,
+            exceptions.InfobloxConfigException,
             config.ConfigFinder,
             stream=io.BytesIO(valid_config),
             member_manager=mock.Mock()

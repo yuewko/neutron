@@ -16,6 +16,7 @@
 #    under the License.
 
 import functools
+import re
 
 from oslo.config import cfg
 import requests
@@ -48,6 +49,9 @@ def reraise_neutron_exception(func):
     def callee(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except req_exc.Timeout as e:
+            LOG.error(e.message)
+            raise exc.InfobloxTimeoutError(e)
         except req_exc.RequestException as e:
             LOG.error(_("HTTP request failed: %s"), e)
             raise exc.InfobloxConnectionError(reason=e)
@@ -62,6 +66,8 @@ class Infoblox(object):
     Defines methods for getting, creating, updating and
     removing objects from an Infoblox server instance.
     """
+    TIMEOUT = 10.0
+    MAX_RETRIES = 3
 
     def __init__(self):
         """
@@ -77,6 +83,7 @@ class Infoblox(object):
         if not self.wapi or not self.username or not self.password:
             raise exc.InfobloxIsMisconfigured()
 
+        self.is_cloud = self.is_cloud_wapi(self.wapi)
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=cfg.CONF.infoblox_http_pool_connections,
@@ -85,6 +92,15 @@ class Infoblox(object):
         self.session.mount('https://', adapter)
         self.session.auth = (self.username, self.password)
         self.session.verify = self.sslverify
+
+    @staticmethod
+    def is_cloud_wapi(wapi_url):
+        CLOUD_WAPI_MAJOR_VERSION = 2
+        version_match = re.search('\/wapi\/v(\d+)\.(\d+)', wapi_url)
+        if version_match:
+            if int(version_match.group(1)) >= CLOUD_WAPI_MAJOR_VERSION:
+                return True
+        return False
 
     def _construct_url(self, relative_path, query_params=None, extattrs=None):
         if query_params is None:
@@ -111,20 +127,23 @@ class Infoblox(object):
         baseurl = urlparse.urljoin(self.wapi, urllib.quote(relative_path))
         return baseurl + query
 
-    def _validate_objtype_or_die(self, objtype):
+    def _validate_objtype_or_die(self, objtype, objtype_expected=True):
         if not objtype:
             raise ValueError('WAPI object type can\'t be empty.')
-        if '/' in objtype:
-            raise ValueError('WAPI object type can\'t contains slash.')
+        if objtype_expected and '/' in objtype:
+            raise ValueError('WAPI object type can\'t contain slash.')
 
     @reraise_neutron_exception
     def get_object(self, objtype, payload=None, return_fields=None,
-                   extattrs=None):
+                   extattrs=None, proxy=False):
         """
         Retrieve a list of Infoblox objects of type 'objtype'
         Args:
-            objtype  (str): Infoblox object type, e.g. 'network', 'range', etc.
+            objtype  (str): Infoblox object type, e.g. 'network', 
+                            'range', etc.
             payload (dict): Payload with data to send
+            return_fields (list): List of fields to be returned
+            extattrs      (list): List of Extensible Attributes
         Returns:
             A list of the Infoblox objects requested
         Raises:
@@ -138,18 +157,48 @@ class Infoblox(object):
         self._validate_objtype_or_die(objtype)
 
         query_params = dict()
+        if payload:
+            query_params = payload
+
         if return_fields:
             query_params['_return_fields'] = ','.join(return_fields)
 
+        # Some get requests like 'ipv4address' should be always
+        # proxied to GM on Hellfire
+        # If request is cloud and proxy is not forced yet,
+        # then plan to do 2 request:
+        # - the first one is not proxified to GM
+        # - the second is proxified to GM
+        urls = dict()
+        urls['direct'] = self._construct_url(objtype, query_params, extattrs)
+        if self.is_cloud:
+            query_params['_proxy_search'] = 'GM'
+            urls['proxy'] = self._construct_url(objtype, query_params, extattrs)
+
+        url = urls['direct']
+        if self.is_cloud and proxy:
+            url = urls['proxy']
+
         headers = {'Content-type': 'application/json'}
 
-        data = jsonutils.dumps(payload)
-        url = self._construct_url(objtype, query_params, extattrs)
+        ib_object = self._get_object(objtype, url, headers)
+        if ib_object:
+            return ib_object
 
+        # if cloud api and proxy is not used, use proxy
+        if self.is_cloud and not proxy:
+            return self._get_object(objtype, urls['proxy'], headers)
+
+        return None
+
+    def _get_object(self, objtype, url, headers):
         r = self.session.get(url,
-                             data=data,
-                             verify=self.sslverify,
-                             headers=headers)
+                     verify=self.sslverify,
+                     timeout=self.TIMEOUT,
+                     headers=headers)
+
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
 
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxSearchError(
@@ -165,8 +214,10 @@ class Infoblox(object):
         """
         Create an Infoblox object of type 'objtype'
         Args:
-            objtype  (str): Infoblox object type, e.g. 'network', 'range', etc.
-            payload (dict): Payload with data to send
+            objtype        (str): Infoblox object type,
+                                  e.g. 'network', 'range', etc.
+            payload       (dict): Payload with data to send
+            return_fields (list): List of fields to be returned
         Returns:
             The object reference of the newly create object
         Raises:
@@ -183,12 +234,16 @@ class Infoblox(object):
             query_params['_return_fields'] = ','.join(return_fields)
 
         url = self._construct_url(objtype, query_params)
-
+        data = jsonutils.dumps(payload)
         headers = {'Content-type': 'application/json'}
         r = self.session.post(url,
-                              data=jsonutils.dumps(payload),
+                              data=data,
                               verify=self.sslverify,
+                              timeout=self.TIMEOUT,
                               headers=headers)
+
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
 
         if r.status_code != requests.codes.CREATED:
             raise exc.InfobloxCannotCreateObject(
@@ -219,6 +274,9 @@ class Infoblox(object):
                               verify=self.sslverify,
                               headers=headers)
 
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
+
         if r.status_code not in (requests.codes.CREATED,
                                  requests.codes.ok):
             raise exc.InfobloxFuncException(
@@ -231,7 +289,7 @@ class Infoblox(object):
         return jsonutils.loads(r.content)
 
     @reraise_neutron_exception
-    def update_object(self, ref, payload):
+    def update_object(self, ref, payload, return_fields=None):
         """
         Update an Infoblox object
         Args:
@@ -242,11 +300,19 @@ class Infoblox(object):
         Raises:
             InfobloxException
         """
+        query_params = {}
+        if return_fields:
+            query_params['_return_fields'] = ','.join(return_fields)
+
         headers = {'Content-type': 'application/json'}
-        r = self.session.put(self._construct_url(ref),
+        r = self.session.put(self._construct_url(ref, query_params),
                              data=jsonutils.dumps(payload),
                              verify=self.sslverify,
+                             timeout=self.TIMEOUT,
                              headers=headers)
+
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
 
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxCannotUpdateObject(
@@ -270,6 +336,9 @@ class Infoblox(object):
         """
         r = self.session.delete(self._construct_url(ref),
                                 verify=self.sslverify)
+
+        if r.status_code == requests.codes.UNAUTHORIZED:
+            raise exc.InfobloxBadWAPICredential(response='')
 
         if r.status_code != requests.codes.ok:
             raise exc.InfobloxCannotDeleteObject(

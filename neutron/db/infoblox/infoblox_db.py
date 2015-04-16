@@ -32,17 +32,14 @@ def get_used_members(context, member_type):
     return [m.member_name for m in members]
 
 
-def get_member(context, map_id, member_type):
+def get_members(context, map_id, member_type):
     """Returns names of members used by currently used mapping (tenant id,
     network id or Infoblox netview name).
     """
     q = context.session.query(models.InfobloxMemberMap)
-
-    member = q.filter_by(map_id=map_id, member_type=member_type).first()
-
-    if member:
-        return member.member_name
-
+    members = q.filter_by(map_id=map_id, member_type=member_type).all()
+    if members:
+        return [member.member_name for member in members]
     return None
 
 
@@ -63,13 +60,29 @@ def is_last_subnet(context, subnet_id):
     return q.filter(models_v2.Subnet.id != subnet_id).count() == 0
 
 
+def is_last_subnet_in_network(context, subnet_id, network_id):
+    q = context.session.query(models_v2.Subnet)
+    return q.filter(models_v2.Subnet.id != subnet_id,
+                    models_v2.Subnet.network_id == network_id).count() == 0
+
+
+def is_last_subnet_in_tenant(context, subnet_id, tenant_id):
+    q = context.session.query(models_v2.Subnet)
+    return q.filter(models_v2.Subnet.id != subnet_id,
+                    models_v2.Subnet.tenant_id == tenant_id).count() == 0
+
+
+def is_last_subnet_in_private_networks(context, subnet_id):
+    sub_qry = context.session.query(external_net_db.ExternalNetwork.network_id)
+    q = context.session.query(models_v2.Subnet.id)
+    q = q.filter(models_v2.Subnet.id != subnet_id)
+    q = q.filter(~models_v2.Subnet.network_id.in_(sub_qry))
+    return q.count() == 0
+
+
 def is_network_external(context, network_id):
-    try:
-        context.session.query(external_net_db.ExternalNetwork).filter_by(
-            network_id=network_id).one()
-        return True
-    except exc.NoResultFound:
-        return False
+    q = context.session.query(external_net_db.ExternalNetwork)
+    return q.filter_by(network_id=network_id).count() > 0
 
 
 def delete_ip_allocation(context, network_id, subnet, ip_address):
@@ -89,26 +102,40 @@ def get_subnets_by_network(context, network_id):
     return subnet_qry.filter_by(network_id=network_id).all()
 
 
+def get_subnets_by_port(context, port_id):
+    allocs = (context.session.query(models_v2.IPAllocation).
+              join(models_v2.Port).
+              filter_by(id=port_id)
+              .all())
+    subnets = []
+    subnet_qry = context.session.query(models_v2.Subnet)
+    for allocation in allocs:
+        subnets.append(subnet_qry.filter_by(id=allocation.subnet_id).first())
+    return subnets
+
+
+def get_port_by_id(context, port_id):
+    query = context.session.query(models_v2.Port)
+    return query.filter_by(id=port_id).one()
+
+
 def get_network_name(context, subnet):
     q = context.session.query(models_v2.Network)
     net_name = q.join(models_v2.Subnet).filter(
         models_v2.Subnet.id == subnet['id']).first()
-
     if net_name:
         return net_name.name
+    return None
 
 
 def get_instance_id_by_floating_ip(context, floating_ip_id):
-    try:
-        query = context.session.query(l3_db.FloatingIP, models_v2.Port)
-        query = query.filter(l3_db.FloatingIP.id == floating_ip_id)
-        query = query.filter(models_v2.Port.id
-                             == l3_db.FloatingIP.fixed_port_id)
-        result = query.one()
-    except exc.NoResultFound:
-        return None
-
-    return result.Port.device_id
+    query = context.session.query(l3_db.FloatingIP, models_v2.Port)
+    query = query.filter(l3_db.FloatingIP.id == floating_ip_id)
+    query = query.filter(models_v2.Port.id == l3_db.FloatingIP.fixed_port_id)
+    result = query.first()
+    if result:
+        return result.Port.device_id
+    return None
 
 
 def get_subnet_dhcp_port_address(context, subnet_id):
@@ -124,12 +151,10 @@ def get_subnet_dhcp_port_address(context, subnet_id):
 
 def get_network_view(context, network_id):
     query = context.session.query(models.InfobloxNetViews)
-    try:
-        net_view = query.filter_by(network_id=network_id).one()
-    except exc.NoResultFound:
-        return None
-
-    return net_view.network_view
+    net_view = query.filter_by(network_id=network_id).first()
+    if net_view:
+        return net_view.network_view
+    return None
 
 
 def set_network_view(context, network_view, network_id):
@@ -141,40 +166,6 @@ def set_network_view(context, network_view, network_id):
     obj = query.filter_by(network_id=network_id).first()
     if not obj:
         context.session.add(ib_net_view)
-
-
-class NetworkL2InfoProvider(object):
-    def __init__(self, plugin=None):
-        """plugin - OpenStack core plugin
-        This class is nessesary for providing information
-        about network_type, physical_network and segmentation_id
-        for each core plugin
-        """
-        if not plugin:
-            self.plugin = cfg.CONF.core_plugin
-        else:
-            self.plugin = plugin
-
-    def get_network_l2_info(self, session, network_id):
-        segments = None
-        l2_info = {'network_type': None,
-                   'segmentation_id': None,
-                   'physical_network': None}
-
-        if self.plugin == 'neutron.plugins.ml2.plugin.Ml2Plugin':
-            from neutron.plugins.ml2 import db as ml2_db
-
-            segments = ml2_db.get_network_segments(session, network_id)[0]
-        elif self.plugin == 'neutron.plugins.openvswitch.' \
-                            'ovs_neutron_plugin.OVSNeutronPluginV2':
-            from neutron.plugins.openvswitch import ovs_db_v2
-            segments = ovs_db_v2.get_network_binding(session, network_id)
-
-        if segments:
-            for name, value in segments.iteritems():
-                l2_info[name] = value
-
-        return l2_info
 
 
 def add_management_ip(context, network_id, fixed_address):
@@ -192,12 +183,20 @@ def delete_management_ip(context, network_id):
 def get_management_ip_ref(context, network_id):
     query = context.session.query(models.InfobloxManagementNetIps)
     mgmt_ip = query.filter_by(network_id=network_id).first()
-
     return mgmt_ip.fixed_address_ref if mgmt_ip else None
 
 
 def get_management_net_ip(context, network_id):
     query = context.session.query(models.InfobloxManagementNetIps)
     mgmt_ip = query.filter_by(network_id=network_id).first()
-
     return mgmt_ip.ip_address if mgmt_ip else None
+
+
+def get_network(context, network_id):
+    network_qry = context.session.query(models_v2.Network)
+    return network_qry.filter_by(id=network_id).one()
+
+
+def get_subnet(context, subnet_id):
+    subnet_qry = context.session.query(models_v2.Subnet)
+    return subnet_qry.filter_by(id=subnet_id).one()

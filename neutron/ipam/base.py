@@ -177,10 +177,6 @@ class IPAMController(neutron_db.NeutronPluginController):
         pass
 
     @abc.abstractmethod
-    def delete_subnets_by_network(self, context, network_id):
-        pass
-
-    @abc.abstractmethod
     def get_subnets(self, context, filters=None, fields=None,
                     sorts=None, limit=None, marker=None,
                     page_reverse=False):

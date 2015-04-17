@@ -142,7 +142,7 @@ class TestInfobloxConnector(base.BaseTestCase):
         with mock.patch.object(requests.Session, 'get',
                           return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
-            patched_get.return_value.content = '{}'
+            patched_get.return_value.content = '{"network": "my-network"}'
             self.connector.get_object(objtype, payload)
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/v2.0/network?ip=0.0.0.0',
@@ -163,7 +163,7 @@ class TestInfobloxConnector(base.BaseTestCase):
         with mock.patch.object(requests.Session, 'get',
                           return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
-            patched_get.return_value.content = '{}'
+            patched_get.return_value.content = '{"network": "my-network"}'
             self.connector.get_object(objtype, payload, extattrs=extattrs)
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/'

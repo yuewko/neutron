@@ -20,6 +20,7 @@ import taskflow.engines
 from neutron.common import constants as neutron_constants
 from neutron.ipam.drivers.infoblox import dns_controller
 from neutron.ipam.drivers.infoblox import infoblox_ipam
+from neutron.db.infoblox import infoblox_db
 from neutron.plugins.common import constants as plugins_constants
 from neutron.tests import base
 

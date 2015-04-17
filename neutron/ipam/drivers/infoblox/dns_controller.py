@@ -122,7 +122,7 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         if extattrs:
             vm_attr = extattrs.get('VM Name')
             if vm_attr:
-                instance_name = vm_attr['value']
+                instance_name = vm_attr.get('value')
         return instance_name
 
     def _bind_names(self, context, backend_port, binding_func, extattrs=None):

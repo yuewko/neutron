@@ -1,2 +1,0 @@
-Neutron RCP API Layer
-=====================

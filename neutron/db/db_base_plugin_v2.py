@@ -1506,7 +1506,7 @@ class NeutronIPAMPlugin(NeutronCorePluginV2):
 
         # Check if the IP's to add are OK
         to_add = self._test_fixed_ips_for_port(context, network_id,
-                                               new_ips, mac_address)
+                                               new_ips, device_owner)
 
         for ip in original_ips:
             LOG.debug(_("Port update. Hold %s"), ip)
@@ -1538,7 +1538,8 @@ class NeutronIPAMPlugin(NeutronCorePluginV2):
         if fixed_configured:
             configured_ips = self._test_fixed_ips_for_port(context,
                                                            p["network_id"],
-                                                           p['fixed_ips'])
+                                                           p['fixed_ips'],
+                                                           p['device_owner'])
 
             for ip in configured_ips:
                 ips.append(self.ipam.allocate_ip(context, p, ip=ip))
@@ -1559,7 +1560,7 @@ class NeutronIPAMPlugin(NeutronCorePluginV2):
                 if subnets:
                     ip = None
                     for subnet in subnets:
-                        ip = self.ipam_driver.allocate_ip(
+                        ip = self.ipam.allocate_ip(
                             context, p, ip={'subnet_id': subnet['id']})
                         if ip:
                             ips.append(ip)

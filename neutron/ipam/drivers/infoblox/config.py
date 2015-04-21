@@ -512,7 +512,7 @@ class MemberManager(object):
 
         for exists_member in exists_members:
             for member in self.available_members:
-                if member.name == exists_member.name:
+                if member.name == exists_member:
                     members.append(member)
 
         if not members:

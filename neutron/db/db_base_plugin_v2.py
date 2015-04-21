@@ -526,7 +526,7 @@ class NeutronCorePluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             ips = self._allocate_fixed_ips(context, to_add, mac_address)
         return ips, prev_ips
 
-    def _allocate_ips_for_port(self, context, port):
+    def _allocate_ips_for_port(self, context, port, port_id):
         """Allocate IP addresses for the port.
 
         If port['fixed_ips'] is set to 'ATTR_NOT_SPECIFIED', allocate IP
@@ -534,6 +534,7 @@ class NeutronCorePluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         a subnet_id then allocate an IP address accordingly.
         """
         p = port['port']
+        p['id'] = port_id
         ips = []
 
         fixed_configured = p['fixed_ips'] is not attributes.ATTR_NOT_SPECIFIED
@@ -1091,55 +1092,7 @@ class NeutronCorePluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
         self._validate_subnet(context, s)
 
-        tenant_id = self._get_tenant_id_for_create(context, s)
-        with context.session.begin(subtransactions=True):
-            network = self._get_network(context, s["network_id"])
-            self._validate_subnet_cidr(context, network, s['cidr'])
-            # The 'shared' attribute for subnets is for internal plugin
-            # use only. It is not exposed through the API
-            args = {'tenant_id': tenant_id,
-                    'id': s.get('id') or uuidutils.generate_uuid(),
-                    'name': s['name'],
-                    'network_id': s['network_id'],
-                    'ip_version': s['ip_version'],
-                    'cidr': s['cidr'],
-                    'enable_dhcp': s['enable_dhcp'],
-                    'gateway_ip': s['gateway_ip'],
-                    'shared': network.shared}
-            if s['ip_version'] == 6 and s['enable_dhcp']:
-                if attributes.is_attr_set(s['ipv6_ra_mode']):
-                    args['ipv6_ra_mode'] = s['ipv6_ra_mode']
-                if attributes.is_attr_set(s['ipv6_address_mode']):
-                    args['ipv6_address_mode'] = s['ipv6_address_mode']
-            subnet = models_v2.Subnet(**args)
-
-            context.session.add(subnet)
-            if s['dns_nameservers'] is not attributes.ATTR_NOT_SPECIFIED:
-                for addr in s['dns_nameservers']:
-                    ns = models_v2.DNSNameServer(address=addr,
-                                                 subnet_id=subnet.id)
-                    context.session.add(ns)
-
-            if s['host_routes'] is not attributes.ATTR_NOT_SPECIFIED:
-                for rt in s['host_routes']:
-                    route = models_v2.SubnetRoute(
-                        subnet_id=subnet.id,
-                        destination=rt['destination'],
-                        nexthop=rt['nexthop'])
-                    context.session.add(route)
-
-            for pool in s['allocation_pools']:
-                ip_pool = models_v2.IPAllocationPool(subnet=subnet,
-                                                     first_ip=pool['start'],
-                                                     last_ip=pool['end'])
-                context.session.add(ip_pool)
-                ip_range = models_v2.IPAvailabilityRange(
-                    ipallocationpool=ip_pool,
-                    first_ip=pool['start'],
-                    last_ip=pool['end'])
-                context.session.add(ip_range)
-
-        return self._make_subnet_dict(subnet)
+        return s
 
     def _update_subnet_dns_nameservers(self, context, id, s):
         old_dns_list = self._get_dns_by_subnet(context, id)
@@ -1354,7 +1307,7 @@ class NeutronCorePluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             context.session.add(db_port)
 
             # Update the IP's for the port
-            ips = self._allocate_ips_for_port(context, port)
+            ips = self._allocate_ips_for_port(context, port, port_id)
             if ips:
                 for ip in ips:
                     ip_address = ip['ip_address']
@@ -1570,7 +1523,7 @@ class NeutronIPAMPlugin(NeutronCorePluginV2):
 
         return ips, prev_ips
 
-    def _allocate_ips_for_port(self, context, port):
+    def _allocate_ips_for_port(self, context, port, port_id):
         """Allocate IP addresses for the port.
 
         If port['fixed_ips'] is set to 'ATTR_NOT_SPECIFIED', allocate IP

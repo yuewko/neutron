@@ -385,7 +385,7 @@ class NeutronIPAM(base.IPAMManager):
                 context,
                 backend_subnet,
                 host,
-                ip.get('ip_address', None))
+                ip)
 
             LOG.debug('IPAMManager allocate IP: %s' % ip_address)
             mac_address = host['mac_address']

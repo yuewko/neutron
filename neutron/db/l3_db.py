@@ -919,7 +919,7 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
                 router_ids.add(floating_ip['router_id'])
 
                 ipam = manager.NeutronManager.get_ipam()
-                ipam.disassociate_floatingip(context, floatingip, port_id)
+                ipam.disassociate_floatingip(context, floating_ip, port_id)
 
                 floating_ip.update({'fixed_port_id': None,
                                     'fixed_ip_address': None,

@@ -1179,6 +1179,7 @@ class NeutronCorePluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         s['cidr'] = db_subnet.cidr
         s['id'] = db_subnet.id
         s['network_id'] = db_subnet.network_id
+        s['tenant_id'] = db_subnet.tenant_id
         self._validate_subnet(context, s, cur_subnet=db_subnet)
 
         if 'gateway_ip' in s and s['gateway_ip'] is not None:
@@ -1572,19 +1573,6 @@ class NeutronIPAMPlugin(NeutronCorePluginV2):
         return ips
 
     def _update_subnet_dns_nameservers(self, context, id, s):
-        db_subnet = self._get_subnet(context, id)
-        s['ip_version'] = db_subnet.ip_version
-        s['cidr'] = db_subnet.cidr
-        s['id'] = db_subnet.id
-        self._validate_subnet(context, s, cur_subnet=db_subnet)
-
-        if 'gateway_ip' in s and s['gateway_ip'] is not None:
-            allocation_pools = [{'start': p['first_ip'],
-                                 'end': p['last_ip']}
-                                for p in db_subnet.allocation_pools]
-            self._validate_gw_out_of_pools(s["gateway_ip"],
-                                           allocation_pools)
-
         subnet, dhcp_changes = self.ipam.update_subnet(context, id, s)
 
         result = self._make_subnet_dict(subnet)

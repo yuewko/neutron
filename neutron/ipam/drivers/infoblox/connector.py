@@ -154,7 +154,7 @@ class Infoblox(object):
         if extattrs is None:
             extattrs = {}
 
-        self._validate_objtype_or_die(objtype)
+        self._validate_objtype_or_die(objtype, objtype_expected=False)
 
         query_params = dict()
         if payload:

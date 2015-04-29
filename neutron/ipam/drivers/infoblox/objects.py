@@ -553,14 +553,15 @@ class FixedAddress(IPAllocationObject):
 
 
 class FixedAddressIPv4(FixedAddress):
-    infoblox_type = 'fixedaddress'
+    def __init__(self):
+        self.infoblox_type = 'fixedaddress'
 
-    return_fields = [
-        'ipv4addr',
-        'mac',
-        'network_view',
-        'extattrs'
-    ]
+        self.return_fields = [
+            'ipv4addr',
+            'mac',
+            'network_view',
+            'extattrs'
+        ]
 
     def to_dict(self):
         return {
@@ -586,14 +587,15 @@ class FixedAddressIPv4(FixedAddress):
 
 
 class FixedAddressIPv6(FixedAddress):
-    infoblox_type = 'ipv6fixedaddress'
+    def __init__(self):
+        self.infoblox_type = 'ipv6fixedaddress'
 
-    return_fields = [
-        'ipv6addr',
-        'duid',
-        'network_view',
-        'extattrs'
-    ]
+        self.return_fields = [
+            'ipv6addr',
+            'duid',
+            'network_view',
+            'extattrs'
+        ]
 
     def to_dict(self):
         return {

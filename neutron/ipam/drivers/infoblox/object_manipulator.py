@@ -22,7 +22,6 @@ from neutron.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 
-
 class IPBackend():
     def __init__(self, object_manipulator):
         self.obj_man = object_manipulator
@@ -98,54 +97,6 @@ class IPBackend():
         update_kwargs = {'name': name}
         self.obj_man._update_infoblox_object(
             'record:host', record_host, update_kwargs)
-
-    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list,
-                                extattrs):
-        # Forward mapping
-        if 'record:a' in bind_list:
-            payload = {
-                self.ib_ipaddr_name: ip,
-                'name': name,
-                'view': dnsview_name,
-                'extattrs':extattrs
-            }
-            additional_create_kwargs = {}
-            self.obj_man._create_infoblox_object(
-                'record:a', payload,
-                additional_create_kwargs,
-                check_if_exists=True)
-
-        # Reverse mapping
-        if 'record:ptr' in bind_list:
-            record_ptr_data = {
-                self.ib_ipaddr_name: ip,
-                'ptrdname': name,
-                'view': dnsview_name,
-                'extattrs': extattrs
-            }
-            additional_create_kwargs = {}
-            self.obj_man._create_infoblox_object(
-                'record:ptr', record_ptr_data,
-                additional_create_kwargs,
-                check_if_exists=True)
-
-    def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
-        if 'record:a' in unbind_list:
-            dns_record_a = {
-                'name': name,
-                self.ib_ipaddr_name: ip,
-                'view': dnsview_name
-            }
-            self.obj_man._delete_infoblox_object(
-                'record:a', dns_record_a)
-
-        if 'record:ptr' in unbind_list:
-            dns_record_ptr = {
-                'ptrdname': name,
-                'view': dnsview_name
-            }
-            self.obj_man._delete_infoblox_object(
-                'record:ptr', dns_record_ptr)
 
     def update_host_record_eas(self, dns_view, ip, extattrs):
         fa_data = {'view': dns_view,
@@ -259,6 +210,54 @@ class IPv4Backend(IPBackend):
     def get_fixed_address(self):
         return objects.FixedAddressIPv4()
 
+    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list,
+                                extattrs):
+        # Forward mapping
+        if 'record:a' in bind_list:
+            payload = {
+                self.ib_ipaddr_name: ip,
+                'name': name,
+                'view': dnsview_name,
+                'extattrs':extattrs
+            }
+            additional_create_kwargs = {}
+            self.obj_man._create_infoblox_object(
+                'record:a', payload,
+                additional_create_kwargs,
+                check_if_exists=True)
+
+        # Reverse mapping
+        if 'record:ptr' in bind_list:
+            record_ptr_data = {
+                self.ib_ipaddr_name: ip,
+                'ptrdname': name,
+                'view': dnsview_name,
+                'extattrs': extattrs
+            }
+            additional_create_kwargs = {}
+            self.obj_man._create_infoblox_object(
+                'record:ptr', record_ptr_data,
+                additional_create_kwargs,
+                check_if_exists=True)
+
+    def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
+        if 'record:a' in unbind_list:
+            dns_record_a = {
+                'name': name,
+                self.ib_ipaddr_name: ip,
+                'view': dnsview_name
+            }
+            self.obj_man._delete_infoblox_object(
+                'record:a', dns_record_a)
+
+        if 'record:ptr' in unbind_list:
+            dns_record_ptr = {
+                'ptrdname': name,
+                'view': dnsview_name
+            }
+            self.obj_man._delete_infoblox_object(
+                'record:ptr', dns_record_ptr)
+
     def find_hostname(self, dns_view, hostname):
         data = {
             'name': hostname,
@@ -349,6 +348,54 @@ class IPv6Backend(IPBackend):
 
     def get_fixed_address(self):
         return objects.FixedAddressIPv6()
+
+    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list,
+                                extattrs):
+        # Forward mapping
+        if 'record:aaaa' in bind_list:
+            payload = {
+                self.ib_ipaddr_name: ip,
+                'name': name,
+                'view': dnsview_name,
+                'extattrs':extattrs
+            }
+            additional_create_kwargs = {}
+            self.obj_man._create_infoblox_object(
+                'record:aaaa', payload,
+                additional_create_kwargs,
+                check_if_exists=True)
+
+        # Reverse mapping
+        if 'record:ptr' in bind_list:
+            record_ptr_data = {
+                self.ib_ipaddr_name: ip,
+                'ptrdname': name,
+                'view': dnsview_name,
+                'extattrs': extattrs
+            }
+            additional_create_kwargs = {}
+            self.obj_man._create_infoblox_object(
+                'record:ptr', record_ptr_data,
+                additional_create_kwargs,
+                check_if_exists=True)
+
+    def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
+        if 'record:aaaa' in unbind_list:
+            dns_record_a = {
+                'name': name,
+                self.ib_ipaddr_name: ip,
+                'view': dnsview_name
+            }
+            self.obj_man._delete_infoblox_object(
+                'record:a', dns_record_a)
+
+        if 'record:ptr' in unbind_list:
+            dns_record_ptr = {
+                'ptrdname': name,
+                'view': dnsview_name
+            }
+            self.obj_man._delete_infoblox_object(
+                'record:ptr', dns_record_ptr)
 
     def find_hostname(self, dns_view, hostname):
         data = {
@@ -690,7 +737,8 @@ class InfobloxObjectManipulator(object):
 
         for obj_ref in obj_refs:
             del_objs.append(obj_ref)
-            if self._get_object_type_from_ref(obj_ref) == 'record:a':
+            if self._get_object_type_from_ref(obj_ref) \
+                                    in ['record:a', 'record:aaaa']:
                 del_objs.extend(
                     self.get_object_refs_associated_with_a_record(obj_ref))
 

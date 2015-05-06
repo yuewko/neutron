@@ -30,11 +30,11 @@ LOG = logging.getLogger(__name__)
 
 OPTS = [
     cfg.ListOpt('external_dhcp_servers',
-               default=None,
-               help=_('IP addresses of DHCP servers to relay to.')),
+                default=None,
+                help=_('IP addresses of DHCP servers to relay to.')),
     cfg.ListOpt('external_dns_servers',
-               default=None,
-               help=_('IP addresses of DNS servers to relay to.')),
+                default=None,
+                help=_('IP addresses of DNS servers to relay to.')),
     cfg.StrOpt('dhcp_relay_bridge',
                default=None,
                help=_('Name of a bridge through which ipam proxy agent will'
@@ -204,8 +204,7 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
             relay_iface_mac_address,
             self.conf.dhcp_relay_bridge)
 
-        interface_name = self.device_manager.setup(self.network,
-                                                   reuse_existing=True)
+        interface_name = self.device_manager.setup(self.network)
         if self.is_dhcp_active() or self.is_dns_active():
             self.restart()
         elif self._enable_dns_dhcp():
@@ -233,8 +232,8 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
                   'dhcp6_pid %(dhcp6_pid)d, is stale, ignoring command'),
                 {
                     'net_id': self.network.id,
-                    'dhcp_pid': self.self.get_dhcp_pid(DhcpDnsProxy.DHCPv4),
-                    'dhcp6_pid': self.self.get_dhcp_pid(DhcpDnsProxy.DHCPv6)
+                    'dhcp_pid': self.get_dhcp_pid(DhcpDnsProxy.DHCPv4),
+                    'dhcp6_pid': self.get_dhcp_pid(DhcpDnsProxy.DHCPv6)
                 })
             else:
                 LOG.debug(
@@ -242,7 +241,7 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
                   'is stale, ignoring command'),
                 {
                     'net_id': self.network.id,
-                    'dhcp_pid': self.self.get_dhcp_pid(DhcpDnsProxy.DHCPv4)
+                    'dhcp_pid': self.get_dhcp_pid(DhcpDnsProxy.DHCPv4)
                 })
 
         if self.is_dhcp_active():

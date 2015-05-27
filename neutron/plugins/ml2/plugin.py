@@ -492,6 +492,9 @@ class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
                         LOG.debug(_("Deleting network record %s"), record)
                         session.delete(record)
 
+                        manager.NeutronManager.get_ipam_driver().delete_network(
+                            context, id)
+
                         for segment in mech_context.network_segments:
                             self.type_manager.release_segment(session, segment)
 
@@ -577,7 +580,8 @@ class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
         session = context.session
         while True:
             with session.begin(subtransactions=True):
-                subnet = self.get_subnet(context, id)
+                record = self._get_subnet(context, id)
+                subnet = self._make_subnet_dict(record, None)
                 # Get ports to auto-delete.
                 allocated = (session.query(models_v2.IPAllocation).
                              filter_by(subnet_id=id).
@@ -596,11 +600,21 @@ class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
                 if not allocated:
                     mech_context = driver_context.SubnetContext(self, context,
                                                                 subnet)
+                    #already_deleted = (super(Ml2Plugin, self)
+                    #                   .delete_subnet(context, id))
                     self.mechanism_manager.delete_subnet_precommit(
                         mech_context)
 
+                    #if not already_deleted:
+                    #    LOG.debug(_("Deleting subnet record"))
+                    #
+                    #    record = self._get_subnet(context, id)
+                    #    session.delete(record)
+
+                    manager.NeutronManager.get_ipam_driver().delete_subnet(
+                        context, id)
+
                     LOG.debug(_("Deleting subnet record"))
-                    record = self._get_subnet(context, id)
                     session.delete(record)
 
                     LOG.debug(_("Committing transaction"))

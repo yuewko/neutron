@@ -3749,9 +3749,9 @@ class TestNeutronDbPluginV2(base.BaseTestCase):
     """Unit Tests for NeutronDbPluginV2 IPAM Logic."""
 
     def test_generate_ip(self):
-        with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+        with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                '_try_generate_ip') as generate:
-            with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+            with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                    '_rebuild_availability_ranges') as rebuild:
 
                 db_base_plugin_v2.NeutronDbPluginV2._generate_ip('c', 's')
@@ -3760,9 +3760,9 @@ class TestNeutronDbPluginV2(base.BaseTestCase):
         self.assertEqual(0, rebuild.call_count)
 
     def test_generate_ip_exhausted_pool(self):
-        with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+        with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                '_try_generate_ip') as generate:
-            with mock.patch.object(db_base_plugin_v2.NeutronDbPluginV2,
+            with mock.patch.object(db_base_plugin_v2.NeutronCorePluginV2,
                                    '_rebuild_availability_ranges') as rebuild:
 
                 exception = n_exc.IpAddressGenerationFailure(net_id='n')

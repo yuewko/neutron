@@ -106,7 +106,8 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         # DNS relay IP.
         nameservers = [item.ipv6 if subnet['ip_version'] == 6
                                  else item.ip for item in dns_members]
-        nameservers += user_nameservers
+
+        nameservers += [n for n in user_nameservers if n not in nameservers]
 
         nview_extattrs = self.ea_manager.get_extattrs_for_nview(context)
         network_extattrs = self.ea_manager.get_extattrs_for_network(

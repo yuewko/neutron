@@ -18,6 +18,7 @@ from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
 from neutron.db.infoblox import infoblox_db as infoblox_db
+from neutron.common import ipv6_utils
 from neutron.ipam.drivers.infoblox import config
 from neutron.ipam.drivers.infoblox import connector
 from neutron.ipam.drivers.infoblox import constants as ib_constants
@@ -130,20 +131,22 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
 
         for ip in backend_port['fixed_ips']:
             subnet = infoblox_db.get_subnet(context, ip['subnet_id'])
-            cfg = self.config_finder.find_config_for_subnet(context, subnet)
-            dns_members = cfg.reserve_dns_members()
-            all_dns_members.extend(dns_members)
-            ip_addr = ip['ip_address']
-            instance_name = self.get_instancename(extattrs)
+            if subnet['ip_version'] == 4 or \
+                    not ipv6_utils.is_auto_address_subnet(subnet):
+                cfg = self.config_finder.find_config_for_subnet(context, subnet)
+                dns_members = cfg.reserve_dns_members()
+                all_dns_members.extend(dns_members)
+                ip_addr = ip['ip_address']
+                instance_name = self.get_instancename(extattrs)
 
-            hostname_pattern = self.get_hostname_pattern(backend_port, cfg)
-            pattern_builder = self.pattern_builder(hostname_pattern,
-                                                   cfg.domain_suffix_pattern)
-            fqdn = pattern_builder.build(
-                context, subnet, backend_port, ip_addr, instance_name)
+                hostname_pattern = self.get_hostname_pattern(backend_port, cfg)
+                pattern_builder = self.pattern_builder(hostname_pattern,
+                                                       cfg.domain_suffix_pattern)
+                fqdn = pattern_builder.build(
+                    context, subnet, backend_port, ip_addr, instance_name)
 
-            binding_func(cfg.network_view, cfg.dns_view, ip_addr, fqdn,
-                         extattrs)
+                binding_func(cfg.network_view, cfg.dns_view, ip_addr, fqdn,
+                             extattrs)
 
         for member in set(all_dns_members):
             self.infoblox.restart_all_services(member)

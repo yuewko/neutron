@@ -143,7 +143,8 @@ class InfobloxEaManager(object):
         os_instance_name = None
 
         set_os_instance_id = ((not ignore_instance_id) and
-            (port['device_owner'] not in neutron_internal_services_dev_owners))
+                              (port['device_owner'] not in
+                               neutron_internal_services_dev_owners))
 
         if set_os_instance_id:
             # for floating ip, no instance id exists
@@ -218,7 +219,8 @@ class InfobloxEaManager(object):
 
         return os_instance_id
 
-    def _to_str_or_none(self, value):
+    @staticmethod
+    def _to_str_or_none(value):
         retval = None
         if not isinstance(value, basestring):
             if value is not None:

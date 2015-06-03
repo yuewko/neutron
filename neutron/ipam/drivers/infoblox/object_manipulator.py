@@ -174,7 +174,7 @@ class IPv4Backend(IPBackend):
             self.ib_network_name, network_data, check_if_exists=False)
 
     def create_ip_range(self, network_view, start_ip, end_ip, network,
-                       disable, range_extattrs):
+                        disable, range_extattrs):
         range_data = {'start_addr': start_ip,
                       'end_addr': end_ip,
                       'extattrs': range_extattrs,
@@ -614,7 +614,7 @@ class InfobloxObjectManipulator(object):
     def add_ip_to_host_record_from_range(self, host_record, network_view,
                                          mac, first_ip, last_ip):
         ip = objects.IPAllocationObject.next_available_ip_from_range(
-                network_view, first_ip, last_ip)
+            network_view, first_ip, last_ip)
         hr = self.add_ip_to_record(host_record, ip, mac)
         return hr
 
@@ -861,7 +861,7 @@ class InfobloxObjectManipulator(object):
 
     def _update_host_record_ips(self, ipaddrs_name, host_record):
         ipaddrs = {ipaddrs_name: [ip.to_dict(add_host=False)
-                                 for ip in host_record.ips]}
+                                  for ip in host_record.ips]}
         return self._update_infoblox_object_by_ref(
             host_record.ref, ipaddrs, return_fields=[ipaddrs_name])
 

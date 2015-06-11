@@ -322,7 +322,7 @@ class HostRecordIPv4(HostRecord):
             u'Cloud API Owned': {u'value': u'True'},
             u'VM ID': {u'value': u'None'},
             u'IP Type': {u'value': u'Fixed'},
-            u'CMP Type': {u'value': u'openstack'},
+            u'CMP Type': {u'value': u'OpenStack'},
             u'Port ID': {u'value': u'136ef9ad-9c88-41ea-9fa6-bd48d8ec789a'},
             u'Tenant ID': {u'value': u'00fd80791dee4112bb538c872b206d4c'}
         }
@@ -448,7 +448,7 @@ class HostRecordIPv6(HostRecord):
                         u'Port ID': {u'value': u'77c2ee08-32bf-4cd6-a24f-586ca91bd533'},
                         u'VM ID': {u'value': u'None'},
                         u'IP Type': {u'value': u'Fixed'},
-                        u'CMP Type': {u'value': u'openstack'},
+                        u'CMP Type': {u'value': u'OpenStack'},
                         u'Cloud API Owned': {u'value': u'True'},
                         u'Tenant ID': {u'value': u'00fd80791dee4112bb538c872b206d4c'}
                      }

@@ -241,7 +241,7 @@ class InfobloxEaManager(object):
 
     @classmethod
     def add_openstack_extattrs_marker(cls, extattrs):
-        extattrs[cls.OPENSTACK_OBJECT_FLAG] = {'value': 'openstack'}
+        extattrs[cls.OPENSTACK_OBJECT_FLAG] = {'value': 'OpenStack'}
 
 
 def _construct_extattrs(filters):

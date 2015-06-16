@@ -360,8 +360,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                 LOG.debug("No domain-name-servers option found, it will"
                           "not be updated to the private IPAM relay IP.")
                 continue
-            if cfg.require_dhcp_relay:
-                net.update_member_ip_in_dns_nameservers(ip['ip_address'])
+            net.update_member_ip_in_dns_nameservers(ip['ip_address'])
             self.infoblox.update_network_options(net)
 
     def create_network(self, context, network):

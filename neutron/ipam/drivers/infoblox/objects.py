@@ -151,14 +151,17 @@ class Network(object):
                 return True
         return False
 
+    def _is_member_ip(self, ip):
+        return ip in self.member_ip_addrs
+
     def update_member_ip_in_dns_nameservers(self, relay_ip):
         for opt in self.options:
             if self._is_dns_option(opt):
                 original_value = opt['value'].split(',')
-                original_value.append(relay_ip)
-                original_value = set(list(original_value))
+                original_value.insert(0, relay_ip)
                 opt['value'] = ",".join(
-                    [val for val in original_value if val])
+                    [val for val in original_value
+                        if val and not self._is_member_ip(val)])
 
                 return
 

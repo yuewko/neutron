@@ -211,7 +211,8 @@ class Infoblox(object):
         return jsonutils.loads(r.content)
 
     @reraise_neutron_exception
-    def create_object(self, objtype, payload, return_fields=None):
+    def create_object(self, objtype, payload,
+                     return_fields=None,  delegate_member=None):
         """
         Create an Infoblox object of type 'objtype'
         Args:
@@ -224,6 +225,12 @@ class Infoblox(object):
         Raises:
             InfobloxException
         """
+        if self.is_cloud and delegate_member:
+            payload.update({"cloud_info": {"delegated_member": {
+                "_struct": "dhcpmember",
+                "ipv4addr": delegate_member.ip,
+                "name": delegate_member.name}}})
+
         if not return_fields:
             return_fields = []
 

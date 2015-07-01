@@ -43,8 +43,8 @@ class IPBackend():
             'ip_address': ip
         }
         assoc_objects = self.obj_man._get_infoblox_object_or_none(
-            self.ib_ipaddr_object_name, assoc_with_ip, return_fields=['objects'],
-            proxy=True)
+            self.ib_ipaddr_object_name, assoc_with_ip,
+            return_fields=['objects'], proxy=True)
         if assoc_objects:
             return assoc_objects['objects']
         return []
@@ -179,7 +179,8 @@ class IPv4Backend(IPBackend):
                       'end_addr': end_ip,
                       'extattrs': range_extattrs,
                       'network_view': network_view}
-        ib_object = self.obj_man._get_infoblox_object_or_none('range', range_data)
+        ib_object = self.obj_man._get_infoblox_object_or_none('range',
+                                                              range_data)
         if not ib_object:
             range_data['disable'] = disable
             self.obj_man._create_infoblox_object(
@@ -318,7 +319,8 @@ class IPv6Backend(IPBackend):
                       'extattrs': range_extattrs,
                       'network': network,
                       'network_view': network_view}
-        ib_object = self.obj_man._get_infoblox_object_or_none('ipv6range', range_data)
+        ib_object = self.obj_man._get_infoblox_object_or_none('ipv6range',
+                                                              range_data)
         if not ib_object:
             range_data['disable'] = disable
             self.obj_man._create_infoblox_object(
@@ -438,10 +440,11 @@ class InfobloxObjectManipulator(object):
     def __init__(self, connector):
         self.connector = connector
 
-    def create_network_view(self, netview_name, nview_extattrs):
+    def create_network_view(self, netview_name, nview_extattrs, member):
         net_view_data = {'name': netview_name,
                          'extattrs': nview_extattrs}
-        return self._create_infoblox_object('networkview', net_view_data)
+        return self._create_infoblox_object('networkview', net_view_data,
+                                    delegate_member=member)
 
     def delete_network_view(self, net_view_name):
         # never delete default network view
@@ -590,7 +593,8 @@ class InfobloxObjectManipulator(object):
         created_fa = self._create_infoblox_ip_address(fa)
         return created_fa
 
-    def create_fixed_address_from_cidr(self, network_view, mac, cidr, extattrs):
+    def create_fixed_address_from_cidr(self, network_view, mac, cidr,
+                                       extattrs):
         ip_backend = IPBackendFactory.get(self, cidr)
 
         fa = ip_backend.get_fixed_address()
@@ -690,9 +694,11 @@ class InfobloxObjectManipulator(object):
         ip_backend = IPBackendFactory.get(self, ip)
         ip_backend.bind_name_with_host_record(dnsview_name, ip, name, extattrs)
 
-    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list, extattrs):
+    def bind_name_with_record_a(self, dnsview_name, ip, name, bind_list,
+                                extattrs):
         ip_backend = IPBackendFactory.get(self, ip)
-        ip_backend.bind_name_with_record_a(dnsview_name, ip, name, bind_list, extattrs)
+        ip_backend.bind_name_with_record_a(dnsview_name, ip, name, bind_list,
+                                           extattrs)
 
     def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
         ip_backend = IPBackendFactory.get(self, ip)
@@ -775,7 +781,8 @@ class InfobloxObjectManipulator(object):
     def _create_infoblox_object(self, obj_type, payload,
                                 additional_create_kwargs=None,
                                 check_if_exists=True,
-                                return_fields=None):
+                                return_fields=None,
+                                delegate_member=None):
         if additional_create_kwargs is None:
             additional_create_kwargs = {}
 
@@ -791,7 +798,7 @@ class InfobloxObjectManipulator(object):
         if not ib_object:
             payload.update(additional_create_kwargs)
             ib_object = self.connector.create_object(obj_type, payload,
-                                                     return_fields)
+                                            return_fields, delegate_member)
             LOG.info(
                 _("Infoblox %(obj_type)s "
                   "was created: %(ib_object)s"),

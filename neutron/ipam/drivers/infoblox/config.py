@@ -518,7 +518,7 @@ class Config(object):
     def _members_identifier(self, members):
         if not isinstance(members, list) and \
                 members != self.NEXT_AVAILABLE_MEMBER:
-            members = list(members)
+            members = [members]
         return members
 
 

@@ -203,15 +203,16 @@ class ConfigFinder(object):
             # Look for assigned member; if dhcp_members list specific
             # members, then network_view should be static as well
             netview = conf.get('network_view', 'default')
-            members = conf.get('dhcp_members',
-                               Config.NEXT_AVAILABLE_MEMBER)
-            member_set = set(members)
+            members = conf.get('dhcp_members', Config.NEXT_AVAILABLE_MEMBER)
+            if not isinstance(members, list) and \
+                    members != Config.NEXT_AVAILABLE_MEMBER:
+                members = [members]
             if isinstance(members, list) and \
                     not netview.startswith('{'):
                 if self._assigned_members.get(netview):
-                    self._assigned_members[netview].update(member_set)
+                    self._assigned_members[netview].update(set(members))
                 else:
-                    self._assigned_members[netview] = member_set
+                    self._assigned_members[netview] = set(members)
 
 
 class PatternBuilder(object):

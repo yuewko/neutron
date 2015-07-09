@@ -628,11 +628,12 @@ class FixedAddressIPv6(FixedAddress):
 
 
 class Member(object):
-    def __init__(self, ip, name, ipv6=None, map_id=None):
+    def __init__(self, ip, name, ipv6=None, map_id=None, delegate=True):
         self.ip = ip
         self.ipv6 = ipv6
         self.name = name
         self.map_id = map_id
+        self.delegate = delegate
 
     def __eq__(self, other):
         return self.ip == other.ip and \
@@ -641,8 +642,22 @@ class Member(object):
 
     def __repr__(self):
         return \
-            'Member(IP={ip}, IPv6={ipv6}, name={name}, map_id={map_id})'.\
+            ('Member(IP={ip}, IPv6={ipv6}, name={name}, map_id={map_id}, ' +
+            'delegate={delegate})').\
             format(ip=self.ip,
                    ipv6=self.ipv6,
                    name=self.name,
-                   map_id=self.map_id)
+                   map_id=self.map_id,
+                   delegate=self.delegate)
+
+    @property
+    def specifier(self):
+        """Return _struct dhcpmember that can be used to specify a member"""
+        specifier = {'_struct': 'dhcpmember'}
+        if self.name:
+            specifier['name'] = self.name
+        elif self.ip:
+            specifier['ipv4addr'] = self.ip
+        elif self.ipv6:
+            specifier['ipv6addr'] = self.ipv6
+        return specifier

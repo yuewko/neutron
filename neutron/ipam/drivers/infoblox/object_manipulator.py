@@ -296,8 +296,7 @@ class IPv6Backend(IPBackend):
         # it has nothing to do wiht DHCP protocol.
         members_struct = []
         for member in members:
-            members_struct.append({'ipv4addr': member.ip,
-                                   '_struct': 'dhcpmember'})
+            members_struct.append(member.specifier)
         network_data['members'] = members_struct
 
         dhcp_options = []

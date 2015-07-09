@@ -225,11 +225,9 @@ class Infoblox(object):
         Raises:
             InfobloxException
         """
-        if self.is_cloud and delegate_member:
-            payload.update({"cloud_info": {"delegated_member": {
-                "_struct": "dhcpmember",
-                "ipv4addr": delegate_member.ip,
-                "name": delegate_member.name}}})
+        if self.is_cloud and delegate_member and delegate_member.delegate:
+            payload.update({"cloud_info": {
+                    "delegated_member": delegate_member.specifier}})
 
         if not return_fields:
             return_fields = []

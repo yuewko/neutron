@@ -540,6 +540,7 @@ class MemberManager(object):
                     lambda m: objects.Member(name=m.get('name'),
                                              ip=m.get('ipv4addr'),
                                              ipv6=m.get('ipv6addr'),
+                                             delegate=m.get('delegate'),
                                              map_id=None),
                     filter(lambda m: m.get('is_available', True),
                            all_members))

@@ -17,6 +17,7 @@ import re
 from oslo.config import cfg as neutron_conf
 from taskflow.patterns import linear_flow
 
+from neutron.common import constants as neutron_constants
 from neutron.db.infoblox import infoblox_db as infoblox_db
 from neutron.common import ipv6_utils
 from neutron.ipam.drivers.infoblox import config
@@ -86,29 +87,16 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
 
     def disassociate_floatingip(self, context, ip_address, port_id):
         floating_port_id = ip_address.get('floating_port_id')
-        subs = infoblox_db.get_subnets_by_port(context, floating_port_id)
         port = infoblox_db.get_port_by_id(context, floating_port_id)
         extattrs = self.ea_manager.get_extattrs_for_ip(context, port, True)
-
-        configs = set()
-        for subnet in subs:
-            configs.add(self.config_finder.find_config_for_subnet(context,
-                                                                  subnet))
-
-        for cfg in configs:
-            self.infoblox.update_dns_record_eas(cfg.dns_view,
-                                                ip_address.floating_ip_address,
-                                                extattrs)
-            if neutron_conf.CONF.use_host_records_for_ip_allocation:
-                self.infoblox.update_host_record_eas(
-                    cfg.dns_view, ip_address.floating_ip_address, extattrs)
-            else:
-                self.infoblox.update_fixed_address_eas(
-                    cfg.network_view, ip_address.floating_ip_address, extattrs)
+        self.bind_names(context, port, disassociate=True)
 
     @staticmethod
-    def get_hostname_pattern(port, cfg):
+    def get_hostname_pattern(port, cfg, instance_name):
         port_owner = port['device_owner']
+        if port_owner == neutron_constants.DEVICE_OWNER_FLOATINGIP:
+            if instance_name and "{instance_name}" in cfg.hostname_pattern:
+                return cfg.hostname_pattern
         if (port_owner
                 in ib_constants.NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP.keys()):
             return ib_constants.NEUTRON_DEVICE_OWNER_TO_PATTERN_MAP[port_owner]
@@ -131,15 +119,17 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
             subnet = infoblox_db.get_subnet(context, ip['subnet_id'])
             if subnet['ip_version'] == 4 or \
                     not ipv6_utils.is_auto_address_subnet(subnet):
-                cfg = self.config_finder.find_config_for_subnet(context, subnet)
+                cfg = self.config_finder.find_config_for_subnet(context,
+                                                                subnet)
                 dns_members = cfg.reserve_dns_members()
                 all_dns_members.extend(dns_members)
                 ip_addr = ip['ip_address']
                 instance_name = self.get_instancename(extattrs)
 
-                hostname_pattern = self.get_hostname_pattern(backend_port, cfg)
-                pattern_builder = self.pattern_builder(hostname_pattern,
-                                                       cfg.domain_suffix_pattern)
+                hostname_pattern = self.get_hostname_pattern(
+                                            backend_port, cfg, instance_name)
+                pattern_builder = self.pattern_builder(
+                                hostname_pattern, cfg.domain_suffix_pattern)
                 fqdn = pattern_builder.build(
                     context, subnet, backend_port, ip_addr, instance_name)
 
@@ -149,11 +139,15 @@ class InfobloxDNSController(neutron_ipam.NeutronDNSController):
         for member in set(all_dns_members):
             self.infoblox.restart_all_services(member)
 
-    def bind_names(self, context, backend_port):
+    def bind_names(self, context, backend_port, disassociate=False):
         if not backend_port['device_owner']:
             return
-
-        extattrs = self.ea_manager.get_extattrs_for_ip(context, backend_port)
+        # In the case of disassociating floatingip, we need to explicitly
+        # indicate to ignore instance id associated with the floating ip.
+        # This is because, at this point, the floating ip is still associated
+        # with instance in the neutron database.
+        extattrs = self.ea_manager.get_extattrs_for_ip(
+                        context, backend_port, ignore_instance_id=disassociate)
         try:
             self._bind_names(context, backend_port,
                              self.ip_allocator.bind_names, extattrs)

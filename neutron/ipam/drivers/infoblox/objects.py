@@ -628,7 +628,7 @@ class FixedAddressIPv6(FixedAddress):
 
 
 class Member(object):
-    def __init__(self, ip, name, ipv6=None, map_id=None, delegate=True):
+    def __init__(self, ip, name, ipv6=None, map_id=None, delegate=False):
         self.ip = ip
         self.ipv6 = ipv6
         self.name = name

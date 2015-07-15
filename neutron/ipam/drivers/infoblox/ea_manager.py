@@ -200,7 +200,7 @@ class InfobloxEaManager(object):
         else:
             os_network_is_shared = False
 
-        os_cloud_owned = not (os_network_is_shared or os_network_is_shared)
+        os_cloud_owned = not (os_network_is_external or os_network_is_shared)
         attributes = {
             'Is External': os_network_is_external,
             'Is Shared': os_network_is_shared,

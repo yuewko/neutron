@@ -91,10 +91,9 @@ class IPBackend():
     def bind_name_with_host_record(self, dnsview_name, ip, name, extattrs):
         record_host = {
             self.ib_ipaddr_name: ip,
-            'view': dnsview_name,
-            'extattrs': extattrs
+            'view': dnsview_name
         }
-        update_kwargs = {'name': name}
+        update_kwargs = {'name': name, 'extattrs': extattrs}
         self.obj_man._update_infoblox_object(
             'record:host', record_host, update_kwargs)
 
@@ -217,29 +216,31 @@ class IPv4Backend(IPBackend):
         if 'record:a' in bind_list:
             payload = {
                 self.ib_ipaddr_name: ip,
+                'view': dnsview_name
+            }
+            additional_create_kwargs = {
                 'name': name,
-                'view': dnsview_name,
                 'extattrs':extattrs
             }
-            additional_create_kwargs = {}
             self.obj_man._create_infoblox_object(
                 'record:a', payload,
                 additional_create_kwargs,
-                check_if_exists=True)
+                update_if_exists=True)
 
         # Reverse mapping
         if 'record:ptr' in bind_list:
             record_ptr_data = {
                 self.ib_ipaddr_name: ip,
+                'view': dnsview_name
+            }
+            additional_create_kwargs = {
                 'ptrdname': name,
-                'view': dnsview_name,
                 'extattrs': extattrs
             }
-            additional_create_kwargs = {}
             self.obj_man._create_infoblox_object(
                 'record:ptr', record_ptr_data,
                 additional_create_kwargs,
-                check_if_exists=True)
+                update_if_exists=True)
 
     def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
         if 'record:a' in unbind_list:
@@ -356,29 +357,31 @@ class IPv6Backend(IPBackend):
         if 'record:aaaa' in bind_list:
             payload = {
                 self.ib_ipaddr_name: ip,
+                'view': dnsview_name
+            }
+            additional_create_kwargs = {
                 'name': name,
-                'view': dnsview_name,
                 'extattrs':extattrs
             }
-            additional_create_kwargs = {}
             self.obj_man._create_infoblox_object(
                 'record:aaaa', payload,
                 additional_create_kwargs,
-                check_if_exists=True)
+                update_if_exists=True)
 
         # Reverse mapping
         if 'record:ptr' in bind_list:
             record_ptr_data = {
                 self.ib_ipaddr_name: ip,
+                'view': dnsview_name
+            }
+            additional_create_kwargs = {
                 'ptrdname': name,
-                'view': dnsview_name,
                 'extattrs': extattrs
             }
-            additional_create_kwargs = {}
             self.obj_man._create_infoblox_object(
                 'record:ptr', record_ptr_data,
                 additional_create_kwargs,
-                check_if_exists=True)
+                update_if_exists=True)
 
     def unbind_name_from_record_a(self, dnsview_name, ip, name, unbind_list):
         if 'record:aaaa' in unbind_list:
@@ -781,12 +784,13 @@ class InfobloxObjectManipulator(object):
                                 additional_create_kwargs=None,
                                 check_if_exists=True,
                                 return_fields=None,
-                                delegate_member=None):
+                                delegate_member=None,
+                                update_if_exists=False):
         if additional_create_kwargs is None:
             additional_create_kwargs = {}
 
         ib_object = None
-        if check_if_exists:
+        if check_if_exists or update_if_exists:
             ib_object = self._get_infoblox_object_or_none(obj_type, payload)
             if ib_object:
                 LOG.info(
@@ -802,6 +806,9 @@ class InfobloxObjectManipulator(object):
                 _("Infoblox %(obj_type)s "
                   "was created: %(ib_object)s"),
                 {'obj_type': obj_type, 'ib_object': ib_object})
+        elif update_if_exists:
+            self._update_infoblox_object_by_ref(ib_object,
+                                                additional_create_kwargs)
 
         return ib_object
 

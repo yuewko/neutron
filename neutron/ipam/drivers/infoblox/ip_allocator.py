@@ -86,12 +86,7 @@ class HostRecordIPAllocator(IPAllocator):
         reserved_ip_hr = self.infoblox.get_host_record(dnsview_name, ip)
 
         if reserved_hostname_hr == reserved_ip_hr:
-            if extattrs.get('Port Attached Device - Device Owner').\
-                    get('value') == neutron_constants.DEVICE_OWNER_FLOATINGIP:
-                self.infoblox.update_host_record_eas(dnsview_name,
-                                                     ip, extattrs)
             return
-
         if reserved_hostname_hr:
             for hr_ip in reserved_ip_hr.ips:
                 if hr_ip == ip:

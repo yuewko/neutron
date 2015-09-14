@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from oslo.config import cfg
-from sqlalchemy.orm import exc
 
 import functools
 import time
@@ -24,8 +22,7 @@ from neutron.db import external_net_db
 from neutron.db.infoblox import models
 from neutron.db import l3_db
 from neutron.db import models_v2
-from neutron.openstack.common import log as logging
-#from neutron.openstack.common.db import exception as db_exc
+from oslo_log import log as logging
 from oslo.db import exception as db_exc
 
 

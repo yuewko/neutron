@@ -16,7 +16,7 @@
 import abc
 
 from oslo.config import cfg
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 from neutron.common import constants as neutron_constants
 import six
 

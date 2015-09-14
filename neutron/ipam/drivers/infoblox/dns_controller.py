@@ -28,7 +28,7 @@ from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import object_manipulator
 from neutron.ipam.drivers.infoblox import tasks
 from neutron.ipam.drivers import neutron_ipam
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 
 OPTS = [
     neutron_conf.StrOpt('private_dns_view_name',

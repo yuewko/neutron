@@ -26,7 +26,7 @@ from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import tasks
 from neutron.ipam.drivers import neutron_db
 from neutron.ipam.drivers import neutron_ipam
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 from neutron.openstack.common import uuidutils
 
 

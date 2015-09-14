@@ -20,7 +20,7 @@ from sqlalchemy.orm import exc
 from neutron.common import exceptions as n_exc
 from neutron.db import common_db_mixin
 from neutron.db import models_v2
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 
 
 LOG = logging.getLogger(__name__)

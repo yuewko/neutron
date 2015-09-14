@@ -25,7 +25,7 @@ from neutron.db.infoblox import models as ib_models
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import nova_manager
 from neutron.ipam.drivers.infoblox import objects
-from neutron.openstack.common import jsonutils
+from oslo_serialization import jsonutils
 
 LOG = logging.getLogger(__name__)
 OPTS = [

@@ -23,7 +23,7 @@ from neutron.ipam.drivers.infoblox import constants as ib_constants
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import l2_driver
 from neutron.ipam.drivers.infoblox import nova_manager
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 
 
 LOG = logging.getLogger(__name__)

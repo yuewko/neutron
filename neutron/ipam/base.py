@@ -20,7 +20,7 @@ import abc
 import six
 
 from neutron.ipam.drivers import neutron_db
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 
 # Ports with the following 'device_owner' values will not prevent
 # network deletion.  If delete_network() finds that all ports on a

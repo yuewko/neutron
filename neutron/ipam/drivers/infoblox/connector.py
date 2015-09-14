@@ -25,8 +25,8 @@ import urllib
 import urlparse
 
 from neutron.ipam.drivers.infoblox import exceptions as exc
-from neutron.openstack.common import jsonutils
-from neutron.openstack.common import log as logging
+from oslo_serialization import jsonutils
+from oslo_log import log as logging
 
 
 OPTS = [

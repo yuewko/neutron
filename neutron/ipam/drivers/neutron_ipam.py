@@ -19,7 +19,7 @@ from neutron.common import exceptions as q_exc
 from neutron.db import models_v2
 from neutron.ipam import base
 from neutron.ipam.drivers import neutron_db
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 from neutron.openstack.common import uuidutils
 
 LOG = logging.getLogger(__name__)
@@ -83,6 +83,7 @@ class NeutronIPAMController(base.IPAMController):
                'network_id': subnet['network_id'],
                'ip_version': subnet['ip_version'],
                'cidr': subnet['cidr'],
+               'subnetpool_id': subnet.get('subnetpool_id'),
                'allocation_pools': [{'start': pool['first_ip'],
                                      'end': pool['last_ip']}
                                     for pool in subnet['allocation_pools']],

@@ -19,8 +19,8 @@ import six
 
 from oslo.config import cfg
 
-from neutron.openstack.common import importutils
-from neutron.openstack.common import log as logging
+from oslo_utils import importutils
+from oslo_log import log as logging
 
 LOG = logging.getLogger(__name__)
 

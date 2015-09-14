@@ -17,7 +17,7 @@ import netaddr
 
 from neutron.ipam.drivers.infoblox import exceptions as exc
 from neutron.ipam.drivers.infoblox import objects
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 
 
 LOG = logging.getLogger(__name__)

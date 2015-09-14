@@ -23,7 +23,7 @@ from neutron.agent.linux import ip_lib
 from neutron.agent.linux import utils
 from neutron.common import exceptions as exc
 from neutron.common import ipv6_utils
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
 from neutron.openstack.common import uuidutils
 
 LOG = logging.getLogger(__name__)

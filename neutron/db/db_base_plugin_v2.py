@@ -1328,7 +1328,8 @@ class NeutronCorePluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
             self._update_router_gw_ports(context,
                                          network,
                                          subnet)
-        return self._make_subnet_dict(subnet)
+        # return self._make_subnet_dict(subnet)
+        return subnet
 
     def _create_subnet_from_implicit_pool(self, context, subnet):
         #import pdb; pdb.set_trace()

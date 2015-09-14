@@ -49,6 +49,7 @@ class NeutronIPAMController(base.IPAMController):
                 'id': subnet.get('id') or uuidutils.generate_uuid(),
                 'name': subnet['name'],
                 'network_id': subnet['network_id'],
+                'subnetpool_id': subnet['subnetpool_id'],
                 'ip_version': subnet['ip_version'],
                 'cidr': subnet['cidr'],
                 'enable_dhcp': subnet['enable_dhcp'],

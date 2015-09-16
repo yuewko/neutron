@@ -24,7 +24,7 @@ from neutron.db.infoblox import models
 from neutron.ipam.drivers.infoblox import config
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import objects
-from neutron.openstack.common import jsonutils
+from oslo_serialization import jsonutils
 from neutron.tests import base
 
 

@@ -93,7 +93,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/v1.1/network',
                 data='{"ip": "0.0.0.0"}',
                 headers={'Content-type': 'application/json'},
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 
@@ -111,7 +111,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 data='{"ip": "0.0.0.0", "extattrs": {"Subnet ID":'
                      ' {"value": "fake_subnet_id"}}}',
                 headers={'Content-type': 'application/json'},
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 
@@ -128,7 +128,7 @@ class TestInfobloxConnector(base.BaseTestCase):
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/v1.1/network?ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 
@@ -143,12 +143,12 @@ class TestInfobloxConnector(base.BaseTestCase):
                                return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
             patched_get.return_value.content = '{"network": "my-network"}'
-            self.connector.get_object(objtype, payload)
+            self.connector.get_object(objtype, payload, proxy=True)
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/v2.0/network?'
                 'ip=0.0.0.0&_proxy_search=GM',
                 headers={'Content-type': 'application/json'},
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 
@@ -165,12 +165,12 @@ class TestInfobloxConnector(base.BaseTestCase):
                                return_value=mock.Mock()) as patched_get:
             patched_get.return_value.status_code = 200
             patched_get.return_value.content = '{"network": "my-network"}'
-            self.connector.get_object(objtype, payload, extattrs=extattrs)
+            self.connector.get_object(objtype, payload, extattrs=extattrs, proxy=True)
             patched_get.assert_called_once_with(
                 'https://infoblox.example.org/wapi/v2.0/network?'
                 '*Subnet ID=fake_subnet_id&ip=0.0.0.0&_proxy_search=GM',
                 headers={'Content-type': 'application/json'},
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 
@@ -189,7 +189,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/'
                 'v1.1/network?*Subnet ID=fake_subnet_id&ip=0.0.0.0',
                 headers={'Content-type': 'application/json'},
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 
@@ -207,7 +207,7 @@ class TestInfobloxConnector(base.BaseTestCase):
                 'https://infoblox.example.org/wapi/v1.1/network',
                 data='{"ip": "0.0.0.0"}',
                 headers={'Content-type': 'application/json'},
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 
@@ -221,7 +221,7 @@ class TestInfobloxConnector(base.BaseTestCase):
             self.connector.delete_object(ref)
             patched_delete.assert_called_once_with(
                 'https://infoblox.example.org/wapi/v1.1/network',
-                timeout=60,
+                timeout=120,
                 verify=False
             )
 

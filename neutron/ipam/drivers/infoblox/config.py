@@ -25,6 +25,7 @@ from neutron.db.infoblox import models as ib_models
 from neutron.ipam.drivers.infoblox import exceptions
 from neutron.ipam.drivers.infoblox import nova_manager
 from neutron.ipam.drivers.infoblox import objects
+from neutron.ipam.drivers.infoblox import keystone_manager
 from oslo_serialization import jsonutils
 
 LOG = logging.getLogger(__name__)
@@ -40,13 +41,13 @@ neutron_conf.CONF.register_opts(OPTS)
 
 class ConfigFinder(object):
     """
-    _variable_conditions: contains tenant_id or subnet_range "condition"
+    _variable_conditions: contains tenant_id, tenant_name or subnet_range "condition"
     _static_conditions: contains global or tenant "condition"
     _assigned_members: contains dhcp members to be registered in db
                        with its mapping id as network view
     """
     VALID_STATIC_CONDITIONS = ['global', 'tenant']
-    VALID_VARIABLE_CONDITIONS = ['tenant_id:', 'subnet_range:']
+    VALID_VARIABLE_CONDITIONS = ['tenant_id:', 'tenant_name:', 'subnet_range:']
     VALID_CONDITIONS = VALID_STATIC_CONDITIONS + VALID_VARIABLE_CONDITIONS
 
     def __init__(self, stream=None, member_manager=None):
@@ -168,12 +169,14 @@ class ConfigFinder(object):
         net_id = subnet.get('network_id', subnet.get('id'))
         cidr = subnet.get('cidr')
         tenant_id = subnet['tenant_id']
+        tenant_name = keystone_manager.get_tenant_name_by_id(subnet['tenant_id'])
 
         is_external = ib_db.is_network_external(context, net_id)
         cond = config.condition
         condition_matches = (
             cond == 'global' or cond == 'tenant' or
             self._variable_condition_match(cond, 'tenant_id', tenant_id) or
+            self._variable_condition_match(cond, 'tenant_name', tenant_name) or
             self._variable_condition_match(cond, 'subnet_range', cidr))
 
         return config.is_external == is_external and condition_matches
@@ -233,6 +236,7 @@ class PatternBuilder(object):
             'network_id': subnet['network_id'],
             'network_name': ib_db.get_network_name(context, subnet),
             'tenant_id': subnet['tenant_id'],
+            'tenant_name': keystone_manager.get_tenant_name_by_id(subnet['tenant_id']),
             'subnet_name': subnet_name,
             'subnet_id': subnet['id'],
             'user_id': context.user_id
@@ -276,6 +280,7 @@ class PatternBuilder(object):
 class Config(object):
     NEXT_AVAILABLE_MEMBER = '<next-available-member>'
     NETWORK_VIEW_TEMPLATES = ['{tenant_id}',
+                              '{tenant_name}',
                               '{network_name}',
                               '{network_id}']
 
@@ -352,6 +357,8 @@ class Config(object):
     def network_view(self):
         if self._net_view_scope == 'tenant_id':
             return self.subnet['tenant_id']
+        if self._net_view_scope == 'tenant_name':
+            return keystone_manager.get_tenant_name_by_id(self.subnet['tenant_id'])
         if self._net_view_scope == 'network_name':
             return ib_db.get_network_name(self.context, self.subnet)
         if self._net_view_scope == 'network_id':
@@ -443,6 +450,8 @@ class Config(object):
 
         if self._net_view == '{tenant_id}':
             self._net_view_scope = 'tenant_id'
+        if self._net_view == '{tenant_name}':
+            self._net_view_scope = 'tenant_name'
         elif self._net_view == '{network_name}':
             self._net_view_scope = 'network_name'
         elif self._net_view == '{network_id}':

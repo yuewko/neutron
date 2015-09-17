@@ -2065,7 +2065,9 @@ class NeutronIPAMPlugin(NeutronCorePluginV2):
 
         if to_add:
             LOG.debug("Port update. Adding %s", to_add)
-            ips = self._allocate_fixed_ips(context, to_add, mac_address)
+            for ip in to_add:
+                ips.append(self.ipam.allocate_ip(context, port, ip=ip))
+
         return ips, prev_ips
 
     def _allocate_ips_for_port(self, context, port, port_id):
@@ -2150,12 +2152,7 @@ class NeutronIPAMPlugin(NeutronCorePluginV2):
         return dhcp_changes['new_dns']
 
     def create_subnet(self, context, subnet):
-        # import pdb; pdb.set_trace()
         s = super(NeutronIPAMPlugin, self).create_subnet(context, subnet)
-        # with context.session.begin(subtransactions=True):
-        # network = self._get_network(context, s["network_id"])
-        # self._validate_subnet_cidr(context, network, s['cidr'])
-        # subnet = self.ipam.create_subnet(context, s)
         return s
 
     def delete_subnet(self, context, id):

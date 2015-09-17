@@ -9,7 +9,9 @@
 [Filters]
 
 # dhcp-agent
-dnsmasq: EnvFilter, env, root, NEUTRON_NETWORK_ID=, dnsmasq
+# dnsmasq: EnvFilter, env, root, NEUTRON_NETWORK_ID=, dnsmasq
+dnsmasq: CommandFilter, dnsmasq, root
+
 # dhcp-agent uses kill as well, that's handled by the generic KillFilter
 # it looks like these are the only signals needed, per
 # neutron/agent/linux/dhcp.py

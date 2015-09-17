@@ -367,10 +367,6 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
         for relay_ip in relay_ips:
             server_list.append("--server=%s" % relay_ip)
 
-        env = {
-            self.NEUTRON_NETWORK_ID_KEY: self.network.id,
-        }
-
         cmd = [
             'dnsmasq',
             '--no-hosts',
@@ -387,9 +383,9 @@ class DhcpDnsProxy(dhcp.DhcpLocalProcess):
         if self.network.namespace:
             ip_wrapper = ip_lib.IPWrapper(self.root_helper,
                                           self.network.namespace)
-            ip_wrapper.netns.execute(cmd, addl_env=env)
+            ip_wrapper.netns.execute(cmd)
         else:
-            utils.execute(cmd, self.root_helper, addl_env=env)
+            utils.execute(cmd, self.root_helper)
 
     def _get_relay_device_name(self):
         return (self.RELAY_DEV_NAME_PREFIX +

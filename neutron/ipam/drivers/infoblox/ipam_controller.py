@@ -105,11 +105,10 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         # the beginning of the list.
         # If this net is not flat, Member IP will later be replaced by
         # DNS relay IP.
-        nameservers = [item.ipv6 if subnet['ip_version'] == 6
-                                 else item.ip for item in dns_members]
+        nameservers = [n for n in [item.ipv6 if subnet['ip_version'] == 6
+                                   else item.ip for item in dns_members] if n]
 
         nameservers += [n for n in user_nameservers if n not in nameservers]
-
         nview_extattrs = self.ea_manager.get_extattrs_for_nview(context)
         network_extattrs = self.ea_manager.get_extattrs_for_network(
             context, subnet, network)

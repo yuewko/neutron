@@ -91,6 +91,9 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
         subnet = super(InfobloxIPAMController, self).create_subnet(context, s)
 
         cfg = self.config_finder.find_config_for_subnet(context, subnet)
+#        dhcp_members = []
+#        if not cfg.disable_dhcp:
+#            dhcp_members = cfg.reserve_dhcp_members()
         dhcp_members = cfg.reserve_dhcp_members()
         dns_members = cfg.reserve_dns_members()
 
@@ -129,6 +132,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             'net_view_name':    cfg.network_view,
             'dns_view_name':    cfg.dns_view,
             'cidr':             subnet['cidr'],
+            'disable_dhcp':     cfg.disable_dhcp,
             'dhcp_member':      dhcp_members,
             'gateway_ip':       subnet['gateway_ip'],
             'disable':          True,

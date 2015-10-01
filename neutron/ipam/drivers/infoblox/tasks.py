@@ -20,9 +20,12 @@ from neutron.ipam.drivers.infoblox import exceptions
 from oslo.config import cfg as neutron_conf
 
 class CreateNetViewTask(task.Task):
-    def execute(self, obj_manip, net_view_name, nview_extattrs, dhcp_member):
+    def execute(self, obj_manip, net_view_name, nview_extattrs, dhcp_member, disable_dhcp):
+        member = dhcp_member
+        if disable_dhcp:
+            member = None
         obj_manip.create_network_view(
-                        net_view_name, nview_extattrs, dhcp_member[0])
+                        net_view_name, nview_extattrs, member)
 
     def revert(self, obj_manip, net_view_name, **kwargs):
         if not obj_manip.has_networks(net_view_name):
@@ -31,8 +34,10 @@ class CreateNetViewTask(task.Task):
 
 class CreateNetworkTask(task.Task):
     def execute(self, obj_manip, net_view_name, cidr, nameservers, dhcp_member,
-                gateway_ip, dhcp_trel_ip, network_extattrs, related_members,
-                ip_version, ipv6_ra_mode=None, ipv6_address_mode=None):
+                gateway_ip, dhcp_trel_ip, network_extattrs, related_members, disable_dhcp):
+                # ip_version, ipv6_ra_mode=None, ipv6_address_mode=None, disable_dhcp=False):
+        if disable_dhcp:
+            dhcp_member = []
         obj_manip.create_network(net_view_name, cidr, nameservers, dhcp_member,
                                  gateway_ip, dhcp_trel_ip, network_extattrs)
         for member in related_members:

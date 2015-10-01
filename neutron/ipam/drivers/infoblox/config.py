@@ -52,6 +52,7 @@ class ConfigFinder(object):
 
     def __init__(self, stream=None, member_manager=None):
         """Reads config from `io.IOBase`:stream:. Config is JSON format."""
+        #import pdb; pdb.set_trace()
         self._member_manager = member_manager
         self._variable_conditions = []
         self._static_conditions = []
@@ -139,6 +140,7 @@ class ConfigFinder(object):
         :param subnet:
         :return: :raise exceptions.InfobloxConfigException:
         """
+        # import pdb; pdb.set_trace()
         if not self._is_member_registered:
             self.configure_members(context)
 
@@ -306,6 +308,7 @@ class Config(object):
 
         self.require_dhcp_relay = config_dict.get('require_dhcp_relay', False)
 
+        self.disable_dhcp = config_dict.get('disable_dhcp', False)
         self._dhcp_members = self._members_identifier(
             config_dict.get('dhcp_members', self.NEXT_AVAILABLE_MEMBER))
         self._dns_members = self._members_identifier(
@@ -374,10 +377,14 @@ class Config(object):
 
     @property
     def dhcp_members(self):
+        if self.disable_dhcp:
+           return []
         return self._get_members(ib_models.DHCP_MEMBER_TYPE)
 
     @property
     def dns_members(self):
+        if self.disable_dhcp:
+            return []
         return self._get_members(ib_models.DNS_MEMBER_TYPE)
 
     @property
@@ -397,6 +404,8 @@ class Config(object):
             return []
 
     def reserve_dhcp_members(self):
+        if self.disable_dhcp:
+            return []
         reserved_members = self._reserve_members(self._dhcp_members,
                                                  self.network_template,
                                                  ib_models.DHCP_MEMBER_TYPE)

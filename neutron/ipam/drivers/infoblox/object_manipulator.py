@@ -142,6 +142,7 @@ class IPv4Backend(IPBackend):
     def create_network(self, net_view_name, cidr, nameservers=None,
                        members=None, gateway_ip=None, dhcp_trel_ip=None,
                        network_extattrs=None):
+        # import pdb; pdb.set_trace()
         network_data = {'network_view': net_view_name,
                         'network': cidr,
                         'extattrs': network_extattrs}
@@ -149,7 +150,8 @@ class IPv4Backend(IPBackend):
         for member in members:
             members_struct.append({'ipv4addr': member.ip,
                                    '_struct': 'dhcpmember'})
-        network_data['members'] = members_struct
+        if members_struct:
+            network_data['members'] = members_struct
 
         dhcp_options = []
 
@@ -298,7 +300,8 @@ class IPv6Backend(IPBackend):
         members_struct = []
         for member in members:
             members_struct.append(member.specifier)
-        network_data['members'] = members_struct
+        if members_struct:
+            network_data['members'] = members_struct
 
         dhcp_options = []
 

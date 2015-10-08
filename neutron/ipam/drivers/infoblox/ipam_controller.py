@@ -269,8 +269,9 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
                 member.filter_by(network_id=network.id).delete()
 
         preconf_dns_view = cfg._dns_view
-        if (preconf_dns_view and not preconf_dns_view.startswith('default')
-                and not self.infoblox.has_dns_zones(preconf_dns_view)):
+        if (preconf_dns_view and not
+                preconf_dns_view.startswith('default') and not
+                self.infoblox.has_dns_zones(preconf_dns_view)):
             self.infoblox.delete_dns_view(preconf_dns_view)
 
         self.restart_services(context, members=members_to_restart)

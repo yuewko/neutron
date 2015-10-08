@@ -23,10 +23,10 @@ LOG = logging.getLogger(__name__)
 
 class KeystoneClient(object):
     def __init__(self):
-        username=cfg.CONF.nova_admin_username
-        password=cfg.CONF.nova_admin_password
-        auth_url=(cfg.CONF.keystone_authtoken.auth_url+'/v2.0')
-        tenant_id=cfg.CONF.nova_admin_tenant_id
+        username = cfg.CONF.nova_admin_username
+        password = cfg.CONF.nova_admin_password
+        auth_url = (cfg.CONF.keystone_authtoken.auth_url+'/v2.0')
+        tenant_id = cfg.CONF.nova_admin_tenant_id
         self.keystone = kclient.Client(username=username,
                                        password=password,
                                        tenant_id=tenant_id,
@@ -42,6 +42,7 @@ class KeystoneClient(object):
 
 __kclient = None
 __tenant_id_map = {}
+
 
 def get_tenant_name_by_id(tenant_id):
     global __kclient
@@ -60,4 +61,3 @@ def get_tenant_name_by_id(tenant_id):
         tenant_name = __tenant_id_map[tenant_id]
 
     return tenant_name
-

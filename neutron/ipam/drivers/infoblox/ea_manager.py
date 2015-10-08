@@ -50,7 +50,8 @@ class InfobloxEaManager(object):
 
         attributes = {
             'Tenant ID': os_tenant_id,
-            'Tenant Name': keystone_manager.get_tenant_name_by_id(os_tenant_id),
+            'Tenant Name':
+                keystone_manager.get_tenant_name_by_id(os_tenant_id),
             # OpenStack should not own entire network view,
             # since shared or external networks may be created in it
             'Cloud API Owned': False,
@@ -97,7 +98,8 @@ class InfobloxEaManager(object):
             'Segmentation ID': os_segmentation_id,
             'Physical Network Name': os_physical_network,
             'Tenant ID': os_tenant_id,
-            'Tenant Name': keystone_manager.get_tenant_name_by_id(os_tenant_id),
+            'Tenant Name':
+                keystone_manager.get_tenant_name_by_id(os_tenant_id),
             'Account': os_user_id,
         }
 
@@ -114,7 +116,8 @@ class InfobloxEaManager(object):
 
         attributes = {
             'Tenant ID': os_tenant_id,
-            'Tenant Name': keystone_manager.get_tenant_name_by_id(os_tenant_id),
+            'Tenant Name':
+                keystone_manager.get_tenant_name_by_id(os_tenant_id),
             'Account': os_user_id,
             'Cloud API Owned': common_ea['Cloud API Owned'],
         }
@@ -123,7 +126,8 @@ class InfobloxEaManager(object):
     def get_default_extattrs_for_ip(self, context):
         attributes = {
             'Tenant ID': context.tenant_id,
-            'Tenant Name': keystone_manager.get_tenant_name_by_id(context.tenant_id),
+            'Tenant Name':
+                keystone_manager.get_tenant_name_by_id(context.tenant_id),
             'Account': context.user_id,
             'Port ID': None,
             'Port Attached Device - Device Owner': None,
@@ -142,7 +146,8 @@ class InfobloxEaManager(object):
         if os_tenant_id == 'None':
             os_tenant_name = 'None'
         else:
-            os_tenant_name = keystone_manager.get_tenant_name_by_id(os_tenant_id)
+            os_tenant_name =\
+                keystone_manager.get_tenant_name_by_id(os_tenant_id)
 
         neutron_internal_services_dev_owners = \
             ib_constants.NEUTRON_INTERNAL_SERVICE_DEVICE_OWNERS
@@ -191,7 +196,8 @@ class InfobloxEaManager(object):
 
         attributes = {
             'Tenant ID': os_tenant_id,
-            'Tenant Name': keystone_manager.get_tenant_name_by_id(os_tenant_id),
+            'Tenant Name':
+                keystone_manager.get_tenant_name_by_id(os_tenant_id),
             'Account': os_user_id,
             'Cloud API Owned': common_ea['Cloud API Owned'],
         }

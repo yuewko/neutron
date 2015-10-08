@@ -19,8 +19,10 @@ from taskflow import task
 from neutron.ipam.drivers.infoblox import exceptions
 from oslo.config import cfg as neutron_conf
 
+
 class CreateNetViewTask(task.Task):
-    def execute(self, obj_manip, net_view_name, nview_extattrs, dhcp_member, disable_dhcp):
+    def execute(self, obj_manip, net_view_name,
+                nview_extattrs, dhcp_member, disable_dhcp):
         member = dhcp_member
         if disable_dhcp:
             member = None
@@ -33,9 +35,9 @@ class CreateNetViewTask(task.Task):
 
 
 class CreateNetworkTask(task.Task):
-    def execute(self, obj_manip, net_view_name, cidr, nameservers, dhcp_member,
-                gateway_ip, dhcp_trel_ip, network_extattrs, related_members, disable_dhcp):
-                # ip_version, ipv6_ra_mode=None, ipv6_address_mode=None, disable_dhcp=False):
+    def execute(self, obj_manip, net_view_name, cidr, nameservers,
+                dhcp_member, gateway_ip, dhcp_trel_ip, network_extattrs,
+                related_members, disable_dhcp):
         if disable_dhcp:
             dhcp_member = []
         obj_manip.create_network(net_view_name, cidr, nameservers, dhcp_member,

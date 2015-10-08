@@ -309,26 +309,29 @@ class HostRecord(IPAllocationObject):
 class HostRecordIPv4(HostRecord):
     """Sample Infoblox host record object in JSON format:
     {
-        u'_ref': u'record:host/ZG5zLmhvc3QkLl9kZWZhdWx0LmNvbS5nbG9iYWwuY22NA
+      u'_ref': u'record:host/ZG5zLmhvc3QkLl9kZWZhdWx0LmNvbS5nbG9iYWwuY22NA
                    :test_host_name.testsubnet.cloud.global.com/default',
-        u'ipv4addrs': [
-            {
-                u'configure_for_dhcp': False,
-                u'_ref': u'record:host_ipv4addr/lMmQ3ZjkuMmM4ZjhlOTctMGQ5Mi00Y2:22.0.0.2/
-                         test_host_name.testsubnet.cloud.global.com/default', u'ipv4addr': u'22.0.0.2',
-                u'mac': u'fa:16:3e:29:87:70',
-                u'host': u'2c8f8e97-0d92-4cac-a350-09a0c53fe664.33c00d42-9715-43fe-862c-6ff2b7e2d7f9.cloud.global.com'
-            }
-        ],
-        u'extattrs': {
-            u'Account': {u'value': u'8a21c40495f04f30a1b2dc6fd1d9ed1a'},
-            u'Cloud API Owned': {u'value': u'True'},
-            u'VM ID': {u'value': u'None'},
-            u'IP Type': {u'value': u'Fixed'},
-            u'CMP Type': {u'value': u'OpenStack'},
-            u'Port ID': {u'value': u'136ef9ad-9c88-41ea-9fa6-bd48d8ec789a'},
-            u'Tenant ID': {u'value': u'00fd80791dee4112bb538c872b206d4c'}
+      u'ipv4addrs': [
+        {
+          u'configure_for_dhcp': False,
+          u'_ref':
+              u'record:host_ipv4addr/lMmQ3ZjkuMmM4ZjhlOTctMGQ5Mi00Y2:\
+                  22.0.0.2/test_host_name.testsubnet.cloud.global.com/default',
+                    u'ipv4addr': u'22.0.0.2',
+          u'mac': u'fa:16:3e:29:87:70',
+          u'host': u'2c8f8e97-0d92-4cac-a350-09a0c53fe664.\
+                     33c00d42-9715-43fe-862c-6ff2b7e2d7f9.cloud.global.com'
         }
+      ],
+      u'extattrs': {
+        u'Account': {u'value': u'8a21c40495f04f30a1b2dc6fd1d9ed1a'},
+        u'Cloud API Owned': {u'value': u'True'},
+        u'VM ID': {u'value': u'None'},
+        u'IP Type': {u'value': u'Fixed'},
+        u'CMP Type': {u'value': u'OpenStack'},
+        u'Port ID': {u'value': u'136ef9ad-9c88-41ea-9fa6-bd48d8ec789a'},
+        u'Tenant ID': {u'value': u'00fd80791dee4112bb538c872b206d4c'}
+      }
     }
     """
     return_fields = [
@@ -434,27 +437,29 @@ class HostRecordIPv4(HostRecord):
 class HostRecordIPv6(HostRecord):
     """Sample Infoblox host record object in JSON format:
     {
-        u'_ref': u'record:host/ZG5zLmhvc3QkLl9kZWZhdWx0LmNvbS5nbG9iYWwuYMQ
+      u'_ref': u'record:host/ZG5zLmhvc3QkLl9kZWZhdWx0LmNvbS5nbG9iYWwuYMQ
                    :test_host_name.testsubnet.cloud.global.com/default',
-        u'ipv6addrs': [
-            {
-                u'configure_for_dhcp': False,
-                u'_ref': u'record:host_ipv6addr/ZG5zLmhvc3RfYWRkcmV:2607%3Af0d0%3A1002%3A51%3A%3A2/
-                         test_host_name.testsubnet/default',
-                u'host': u'ea30c45d-6385-44a2-b187-94b0c6f8bad1.9706dd0c-b772-4522-93e3-2e4fea2859de.cloud.global.com',
-                u'duid': u'00:6f:6d:ba:fa:16:3e:86:40:e3',
-                u'ipv6addr': u'2607:f0d0:1002:51::2'
-            }
-        ],
-        u'extattrs': {
-                        u'Account': {u'value': u'8a21c40495f04f30a1b2dc6fd1d9ed1a'},
-                        u'Port ID': {u'value': u'77c2ee08-32bf-4cd6-a24f-586ca91bd533'},
-                        u'VM ID': {u'value': u'None'},
-                        u'IP Type': {u'value': u'Fixed'},
-                        u'CMP Type': {u'value': u'OpenStack'},
-                        u'Cloud API Owned': {u'value': u'True'},
-                        u'Tenant ID': {u'value': u'00fd80791dee4112bb538c872b206d4c'}
-                     }
+      u'ipv6addrs': [
+        {
+          u'configure_for_dhcp': False,
+          u'_ref': u'record:host_ipv6addr/ZG5zLmhvc3RfYWRkcmV: \
+                              2607%3Af0d0%3A1002%3A51%3A%3A2/ \
+                             test_host_name.testsubnet/default',
+          u'host': u'ea30c45d-6385-44a2-b187-94b0c6f8bad1. \
+                  9706dd0c-b772-4522-93e3-2e4fea2859de.cloud.global.com',
+          u'duid': u'00:6f:6d:ba:fa:16:3e:86:40:e3',
+          u'ipv6addr': u'2607:f0d0:1002:51::2'
+        }
+      ],
+      u'extattrs': {
+        u'Account': {u'value': u'8a21c40495f04f30a1b2dc6fd1d9ed1a'},
+        u'Port ID': {u'value': u'77c2ee08-32bf-4cd6-a24f-586ca91bd533'},
+        u'VM ID': {u'value': u'None'},
+        u'IP Type': {u'value': u'Fixed'},
+        u'CMP Type': {u'value': u'OpenStack'},
+        u'Cloud API Owned': {u'value': u'True'},
+        u'Tenant ID': {u'value': u'00fd80791dee4112bb538c872b206d4c'}
+      }
     }
     """
     return_fields = [
@@ -643,12 +648,11 @@ class Member(object):
     def __repr__(self):
         return \
             ('Member(IP={ip}, IPv6={ipv6}, name={name}, map_id={map_id}, ' +
-            'delegate={delegate})').\
-            format(ip=self.ip,
-                   ipv6=self.ipv6,
-                   name=self.name,
-                   map_id=self.map_id,
-                   delegate=self.delegate)
+             'delegate={delegate})').format(ip=self.ip,
+                                            ipv6=self.ipv6,
+                                            name=self.name,
+                                            map_id=self.map_id,
+                                            delegate=self.delegate)
 
     @property
     def specifier(self):

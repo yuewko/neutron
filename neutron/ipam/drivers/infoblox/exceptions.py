@@ -58,7 +58,6 @@ class InfobloxHostRecordIpAddrNotCreated(exceptions.NeutronException):
                 "created for IP %(ip)s, mac %(mac)s")
 
 
-
 class InfobloxCannotAllocateIpForSubnet(exceptions.NeutronException):
     message = _("Infoblox Network view %(netview)s, Network %(cidr)s "
                 "does not have IPs available for allocation.")

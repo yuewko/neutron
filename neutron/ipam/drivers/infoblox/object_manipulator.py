@@ -22,6 +22,7 @@ from oslo_log import log as logging
 
 LOG = logging.getLogger(__name__)
 
+
 class IPBackend():
     def __init__(self, object_manipulator):
         self.obj_man = object_manipulator
@@ -222,7 +223,7 @@ class IPv4Backend(IPBackend):
             }
             additional_create_kwargs = {
                 'name': name,
-                'extattrs':extattrs
+                'extattrs': extattrs
             }
             self.obj_man._create_infoblox_object(
                 'record:a', payload,
@@ -364,7 +365,7 @@ class IPv6Backend(IPBackend):
             }
             additional_create_kwargs = {
                 'name': name,
-                'extattrs':extattrs
+                'extattrs': extattrs
             }
             self.obj_man._create_infoblox_object(
                 'record:aaaa', payload,
@@ -449,7 +450,7 @@ class InfobloxObjectManipulator(object):
         net_view_data = {'name': netview_name,
                          'extattrs': nview_extattrs}
         return self._create_infoblox_object('networkview', net_view_data,
-                                    delegate_member=member)
+                                            delegate_member=member)
 
     def delete_network_view(self, net_view_name):
         # never delete default network view
@@ -748,8 +749,8 @@ class InfobloxObjectManipulator(object):
 
         for obj_ref in obj_refs:
             del_objs.append(obj_ref)
-            if self._get_object_type_from_ref(obj_ref) \
-                                    in ['record:a', 'record:aaaa']:
+            if (self._get_object_type_from_ref(obj_ref) in
+                    ['record:a', 'record:aaaa']):
                 del_objs.extend(
                     self.get_object_refs_associated_with_a_record(obj_ref))
 
@@ -803,8 +804,10 @@ class InfobloxObjectManipulator(object):
 
         if not ib_object:
             payload.update(additional_create_kwargs)
-            ib_object = self.connector.create_object(obj_type, payload,
-                                            return_fields, delegate_member)
+            ib_object = self.connector.create_object(obj_type,
+                                                     payload,
+                                                     return_fields,
+                                                     delegate_member)
             LOG.info(
                 _("Infoblox %(obj_type)s "
                   "was created: %(ib_object)s"),

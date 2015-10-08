@@ -41,7 +41,8 @@ neutron_conf.CONF.register_opts(OPTS)
 
 class ConfigFinder(object):
     """
-    _variable_conditions: contains tenant_id, tenant_name or subnet_range "condition"
+    _variable_conditions: contains tenant_id, tenant_name or
+                                        subnet_range "condition"
     _static_conditions: contains global or tenant "condition"
     _assigned_members: contains dhcp members to be registered in db
                        with its mapping id as network view
@@ -52,7 +53,7 @@ class ConfigFinder(object):
 
     def __init__(self, stream=None, member_manager=None):
         """Reads config from `io.IOBase`:stream:. Config is JSON format."""
-        #import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         self._member_manager = member_manager
         self._variable_conditions = []
         self._static_conditions = []
@@ -171,7 +172,8 @@ class ConfigFinder(object):
         net_id = subnet.get('network_id', subnet.get('id'))
         cidr = subnet.get('cidr')
         tenant_id = subnet['tenant_id']
-        tenant_name = keystone_manager.get_tenant_name_by_id(subnet['tenant_id'])
+        tenant_name = \
+            keystone_manager.get_tenant_name_by_id(subnet['tenant_id'])
 
         is_external = ib_db.is_network_external(context, net_id)
         cond = config.condition
@@ -185,9 +187,10 @@ class ConfigFinder(object):
 
     def _read_conditions(self):
         # Define lambdas to check
-        is_static_cond = lambda cond, static_conds: cond in static_conds
-        is_var_cond = lambda cond, var_conds: any([cond.startswith(valid)
-                                                  for valid in var_conds])
+        def is_static_cond(cond, static_conds): return cond in static_conds
+
+        def is_var_cond(cond, var_conds):
+            return any([cond.startswith(valid) for valid in var_conds])
 
         for conf in self._conf:
             # If condition contain colon: validate it as variable
@@ -225,7 +228,8 @@ class PatternBuilder(object):
         self.pattern = '.'.join([el.strip('.')
                                  for el in pattern if el is not None])
 
-    def build(self, context, subnet, port=None, ip_addr=None, instance_name=None):
+    def build(self, context, subnet,
+              port=None, ip_addr=None, instance_name=None):
         """
         Builds string by passing supplied values into pattern
         :raise exceptions.InfobloxConfigException:
@@ -238,7 +242,8 @@ class PatternBuilder(object):
             'network_id': subnet['network_id'],
             'network_name': ib_db.get_network_name(context, subnet),
             'tenant_id': subnet['tenant_id'],
-            'tenant_name': keystone_manager.get_tenant_name_by_id(subnet['tenant_id']),
+            'tenant_name':
+                keystone_manager.get_tenant_name_by_id(subnet['tenant_id']),
             'subnet_name': subnet_name,
             'subnet_id': subnet['id'],
             'user_id': context.user_id
@@ -361,7 +366,8 @@ class Config(object):
         if self._net_view_scope == 'tenant_id':
             return self.subnet['tenant_id']
         if self._net_view_scope == 'tenant_name':
-            return keystone_manager.get_tenant_name_by_id(self.subnet['tenant_id'])
+            return keystone_manager.get_tenant_name_by_id(
+                                                      self.subnet['tenant_id'])
         if self._net_view_scope == 'network_name':
             return ib_db.get_network_name(self.context, self.subnet)
         if self._net_view_scope == 'network_id':
@@ -378,7 +384,7 @@ class Config(object):
     @property
     def dhcp_members(self):
         if self.disable_dhcp:
-           return []
+            return []
         return self._get_members(ib_models.DHCP_MEMBER_TYPE)
 
     @property
@@ -526,8 +532,8 @@ class Config(object):
                                              member_type)
 
     def _get_member_from_template(self, assigned_members, template):
-        member_defined = (assigned_members != self.NEXT_AVAILABLE_MEMBER
-                          and isinstance(assigned_members, basestring))
+        member_defined = (assigned_members != self.NEXT_AVAILABLE_MEMBER and
+                          isinstance(assigned_members, basestring))
         if template and not member_defined:
             msg = 'Member MUST be configured for {template}'.format(
                 template=template)

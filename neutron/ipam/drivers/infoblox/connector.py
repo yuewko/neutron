@@ -98,7 +98,8 @@ class Infoblox(object):
     def is_cloud_wapi(wapi_url):
         version_match = re.search('\/wapi\/v(\d+)\.(\d+)', wapi_url)
         if version_match:
-            if int(version_match.group(1)) >= Infoblox.CLOUD_WAPI_MAJOR_VERSION:
+            if (int(version_match.group(1)) >=
+                    Infoblox.CLOUD_WAPI_MAJOR_VERSION):
                 return True
         return False
 
@@ -140,7 +141,7 @@ class Infoblox(object):
         """
         Retrieve a list of Infoblox objects of type 'objtype'
         Args:
-            objtype  (str): Infoblox object type, e.g. 'network', 
+            objtype  (str): Infoblox object type, e.g. 'network',
                             'range', etc.
             payload (dict): Payload with data to send
             return_fields (list): List of fields to be returned
@@ -174,7 +175,8 @@ class Infoblox(object):
         urls['direct'] = self._construct_url(objtype, query_params, extattrs)
         if self.is_cloud:
             query_params['_proxy_search'] = 'GM'
-            urls['proxy'] = self._construct_url(objtype, query_params, extattrs)
+            urls['proxy'] = self._construct_url(objtype, query_params,
+                                                extattrs)
 
         url = urls['direct']
         if self.is_cloud and proxy:

@@ -14,9 +14,16 @@
 #    under the License.
 
 from keystoneclient.v2_0 import client as kclient
+import logging
 from oslo.config import cfg
 
-import logging
+auth_url_opt = cfg.StrOpt('auth_url',
+                          default='',
+                          help=_('keystone auth_url'))
+keystone_group = cfg.OptGroup(name='keystone_authtoken',
+                              title='Keystone Authtoken')
+cfg.CONF.register_group(keystone_group)
+cfg.CONF.register_opt(auth_url_opt, group=keystone_group)
 
 LOG = logging.getLogger(__name__)
 

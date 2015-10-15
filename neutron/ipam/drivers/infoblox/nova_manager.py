@@ -33,6 +33,7 @@ class NovaManager(object):
                 None,  # project_id - not actually used
                 auth_url=cfg.CONF.nova_admin_auth_url,
                 tenant_id=cfg.CONF.nova_admin_tenant_id,
+                region_name=cfg.CONF.nova.region_name,
                 service_type='compute')
         self.nova = NovaManager._nova_client
 

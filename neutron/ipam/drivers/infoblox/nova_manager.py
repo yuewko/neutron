@@ -32,6 +32,8 @@ class NovaManager(object):
                 cfg.CONF.nova_admin_password,
                 None,  # project_id - not actually used
                 auth_url=cfg.CONF.nova_admin_auth_url,
+                endpoint_type='internalURL',
+                cacert=cfg.CONF.nova.cafile,
                 tenant_id=cfg.CONF.nova_admin_tenant_id,
                 region_name=cfg.CONF.nova.region_name,
                 service_type='compute')

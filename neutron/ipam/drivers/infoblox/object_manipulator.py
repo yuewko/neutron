@@ -715,7 +715,17 @@ class InfobloxObjectManipulator(object):
         return self.connector.get_object('member', {'host_name': member.name})
 
     def restart_all_services(self, member):
-        ib_member = self.get_member(member)[0]
+        if not member:
+            return
+
+        ib_members = self.get_member(member)
+        if not ib_members:
+            return
+
+        ib_member = ib_members[0]
+        if not ib_member['_ref']:
+            return
+
         self.connector.call_func('restartservices', ib_member['_ref'],
                                  {'restart_option': 'RESTART_IF_NEEDED',
                                   'service_option': 'ALL'})

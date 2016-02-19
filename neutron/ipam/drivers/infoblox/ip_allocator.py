@@ -15,6 +15,7 @@
 
 import abc
 
+from neutron.ipam.drivers.infoblox import exceptions as exc
 from oslo.config import cfg
 from oslo_log import log as logging
 from neutron.common import constants as neutron_constants
@@ -125,12 +126,16 @@ class HostRecordIPAllocator(IPAllocator):
         return hr.ips[-1].ip
 
     def deallocate_ip(self, network_view, dns_view_name, ip):
-        host_record = self.infoblox.get_host_record(dns_view_name, ip)
-
-        if host_record and len(host_record.ips) > 1:
-            self.infoblox.delete_ip_from_host_record(host_record, ip)
-        else:
-            self.infoblox.delete_host_record(dns_view_name, ip)
+        try:
+            host_record = self.infoblox.get_host_record(dns_view_name, ip)
+            if host_record and len(host_record.ips) > 1:
+                self.infoblox.delete_ip_from_host_record(host_record, ip)
+            else:
+                self.infoblox.delete_host_record(dns_view_name, ip)
+        except exc.InfobloxSearchError:
+            LOG.warning("Host record %s/%s cannot be deleted because"
+                        " it cannot be found" %
+                        (dns_view_name, ip))
 
 
 class FixedAddressIPAllocator(IPAllocator):

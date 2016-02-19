@@ -43,9 +43,15 @@ class IPBackend():
             'network_view': net_view_name,
             'ip_address': ip
         }
-        assoc_objects = self.obj_man._get_infoblox_object_or_none(
-            self.ib_ipaddr_object_name, assoc_with_ip,
-            return_fields=['objects'], proxy=True)
+        assoc_objects = None
+        try:
+            assoc_objects = self.obj_man._get_infoblox_object_or_none(
+                self.ib_ipaddr_object_name, assoc_with_ip,
+                return_fields=['objects'], proxy=True)
+        except exc.InfobloxSearchError:
+            LOG.warning("Objects associated with %s/%s cannot be deleted"
+                        " because it cannot be found" %
+                        (net_view_name, ip))
         if assoc_objects:
             return assoc_objects['objects']
         return []

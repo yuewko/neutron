@@ -143,7 +143,9 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
             'related_members':  set(cfg.dhcp_members + cfg.dns_members),
             'dhcp_trel_ip':     infoblox_db.get_management_net_ip(
                 context, subnet['network_id']),
-            'ip_version':       subnet['ip_version']
+            'ip_version':       subnet['ip_version'],
+            'subnet_shared_for_creation': cfg.subnet_shared_for_creation,
+            'subnet_shared_for_deletion': cfg.subnet_shared_for_deletion
         }
 
         if subnet['ip_version'] == 6 and subnet['enable_dhcp']:
@@ -248,7 +250,7 @@ class InfobloxIPAMController(neutron_ipam.NeutronIPAMController):
 
         if neutron_conf.CONF.allow_admin_network_deletion or \
             not (cfg.is_global_config or is_shared or is_external or
-                 neutron_conf.CONF.subnet_shared_for_deletion):
+                 cfg.subnet_shared_for_deletion):
             self.infoblox.delete_network(
                 cfg.network_view, cidr=subnet['cidr'])
 

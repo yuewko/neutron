@@ -53,20 +53,21 @@ class CreateNetworkTask(task.Task):
 
 
 class ChainInfobloxNetworkTask(task.Task):
-    def execute(self, obj_manip, net_view_name, cidr, network_extattrs):
+    def execute(self, obj_manip, net_view_name, cidr, network_extattrs,
+                subnet_shared_for_creation):
         ea_names = ['Is External', 'Is Shared']
 
         eas = operator.itemgetter(*ea_names)(network_extattrs)
         shared_or_external = any(eval(ea['value']) for ea in eas)
 
-        if shared_or_external or neutron_conf.CONF.subnet_shared_for_creation:
+        if shared_or_external or subnet_shared_for_creation:
             ib_network = obj_manip.get_network(net_view_name, cidr)
             obj_manip.update_network_options(ib_network, network_extattrs)
         else:
             raise exceptions.InfobloxInternalPrivateSubnetAlreadyExist()
 
     def revert(self, obj_manip, net_view_name, cidr, network_extattrs,
-               **kwargs):
+               subnet_shared_for_creation, **kwargs):
         # keep NIOS network untouched on rollback
         pass
 

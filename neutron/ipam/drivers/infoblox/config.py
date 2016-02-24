@@ -53,7 +53,6 @@ class ConfigFinder(object):
 
     def __init__(self, stream=None, member_manager=None):
         """Reads config from `io.IOBase`:stream:. Config is JSON format."""
-        # import pdb; pdb.set_trace()
         self._member_manager = member_manager
         self._variable_conditions = []
         self._static_conditions = []
@@ -141,7 +140,6 @@ class ConfigFinder(object):
         :param subnet:
         :return: :raise exceptions.InfobloxConfigException:
         """
-        # import pdb; pdb.set_trace()
         if not self._is_member_registered:
             self.configure_members(context)
 
@@ -192,6 +190,10 @@ class ConfigFinder(object):
         def is_var_cond(cond, var_conds):
             return any([cond.startswith(valid) for valid in var_conds])
 
+        def set_subnet_shared_config(conf, var):
+            if var not in conf:
+                conf[var] = getattr(neutron_conf.CONF, var)
+
         for conf in self._conf:
             # If condition contain colon: validate it as variable
             if ':' in conf['condition'] and\
@@ -207,6 +209,10 @@ class ConfigFinder(object):
                 msg = 'Invalid condition specified: {0}'.format(
                       conf['condition'])
                 raise exceptions.InfobloxConfigException(msg=msg)
+
+            for var in ['subnet_shared_for_creation',
+                        'subnet_shared_for_deletion']:
+                set_subnet_shared_config(conf, var)
 
             # Look for assigned member; if dhcp_members list specific
             # members, then network_view should be static as well
@@ -323,6 +329,11 @@ class Config(object):
             'domain_suffix_pattern', 'global.com')
         self.hostname_pattern = config_dict.get(
             'hostname_pattern', 'host-{ip_address}.{subnet_name}')
+
+        self.subnet_shared_for_creation = config_dict.get(
+            'subnet_shared_for_creation')
+        self.subnet_shared_for_deletion = config_dict.get(
+            'subnet_shared_for_deletion')
 
         pattern = re.compile(r'\{\S+\}')
         if pattern.findall(self.domain_suffix_pattern):
